@@ -1,0 +1,37 @@
+pipeline {
+    agent any
+    environment {
+        IMAGE_NAME = "devops-flow-frontend"
+        DOCKER_REGISTRY = "your-docker-repo"
+        K8S_NAMESPACE = "devops"
+    }
+    stages {
+        stage('Checkout') {
+            steps {
+                git 'https://github.com/your-repo/devops-flow.git'
+            }
+        }
+        stage('Build and Test') {
+            steps {
+                sh 'npm install'
+                sh 'npm run build'
+            }
+        }
+        stage('Docker Build & Push') {
+            steps {
+                sh 'docker build -t $DOCKER_REGISTRY/$IMAGE_NAME:latest .'
+                sh 'docker push $DOCKER_REGISTRY/$IMAGE_NAME:latest'
+            }
+        }
+        stage('Configure kubectl') {
+            steps {
+                sh 'kubectl config set-context --current --namespace=$K8S_NAMESPACE'
+            }
+        }
+        stage('Deploy to Kubernetes') {
+            steps {
+                sh 'kubectl apply -f k8s/'
+            }
+        }
+    }
+}
