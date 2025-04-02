@@ -19,8 +19,6 @@ yarn-error.log*
 .DS_Store
 
 # Kubernetes
-*.yaml
-*.yml
 .kube/
 
 # Helm

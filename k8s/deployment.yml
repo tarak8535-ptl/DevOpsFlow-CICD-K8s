@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devops-flow-frontend
+  namespace: devops
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: devops-flow-frontend
+  template:
+    metadata:
+      labels:
+        app: devops-flow-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: your-docker-repo/devops-flow-frontend:latest
+          ports:
+            - containerPort: 80
