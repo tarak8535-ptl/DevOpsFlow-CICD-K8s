@@ -1,0 +1,47 @@
+# Node.js dependencies
+node_modules/
+package-lock.json
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor/IDE settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build files
+/build/
+/dist/
+.DS_Store
+
+# Kubernetes
+*.yaml
+*.yml
+.kube/
+
+# Helm
+charts/
+helm-release.yaml
+values.yaml
+*.tgz
+
+# Docker
+docker-compose.override.yml
+.env
+.dockerignore
+
+# CI/CD
+/.github/
+.Jenkinsfile
+coverage/
+
+# Misc
+*.log
+*.pid
+*.seed
+*.sqlite
+Thumbs.db
