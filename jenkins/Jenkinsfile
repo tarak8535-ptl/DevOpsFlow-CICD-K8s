@@ -1,15 +1,181 @@
 pipeline {
-    agent any
+    agent {
+        kubernetes {
+            yaml '''
+                apiVersion: v1
+                kind: Pod
+                spec:
+                  containers:
+                  - name: docker
+                    image: docker:20.10.16-dind
+                    command:
+                    - cat
+                    tty: true
+                    privileged: true
+                  - name: node
+                    image: node:18-alpine
+                    command:
+                    - cat
+                    tty: true
+                  - name: trivy
+                    image: aquasec/trivy:latest
+                    command:
+                    - cat
+                    tty: true
+                  - name: kubectl
+                    image: bitnami/kubectl:latest
+                    command:
+                    - cat
+                    tty: true
+                  - name: sonar-scanner
+                    image: sonarsource/sonar-scanner-cli:latest
+                    command:
+                    - cat
+                    tty: true
+            '''
+        }
+    }
+    
+    environment {
+        DOCKER_REGISTRY = 'registry.example.com'
+        BACKEND_IMAGE = "${DOCKER_REGISTRY}/devops-flow/backend:${BUILD_NUMBER}"
+        FRONTEND_IMAGE = "${DOCKER_REGISTRY}/devops-flow/frontend:${BUILD_NUMBER}"
+        SONAR_HOST_URL = 'http://sonarqube:9000'
+    }
+    
     stages {
-        stage('Build') {
+        stage('Checkout') {
             steps {
-                echo 'Building the application...'
+                checkout scm
             }
         }
-        stage('Deploy') {
+        
+        stage('Backend Tests') {
             steps {
-                echo 'Deploying application using Helm...'
+                container('node') {
+                    dir('backend') {
+                        sh 'npm ci'
+                        sh 'npm run lint'
+                        sh 'npm test'
+                    }
+                }
             }
+        }
+        
+        stage('Frontend Tests') {
+            steps {
+                container('node') {
+                    dir('frontend') {
+                        sh 'npm ci'
+                        sh 'npm run lint'
+                        sh 'npm test'
+                    }
+                }
+            }
+        }
+        
+        stage('Code Quality') {
+            steps {
+                container('sonar-scanner') {
+                    withSonarQubeEnv('SonarQube') {
+                        sh '''
+                            sonar-scanner \
+                              -Dsonar.projectKey=devops-flow \
+                              -Dsonar.sources=. \
+                              -Dsonar.host.url=${SONAR_HOST_URL} \
+                              -Dsonar.exclusions=**/node_modules/**,**/coverage/**
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('Security Scan') {
+            steps {
+                container('trivy') {
+                    sh 'trivy fs --exit-code 0 --severity HIGH,CRITICAL backend/'
+                    sh 'trivy fs --exit-code 0 --severity HIGH,CRITICAL frontend/'
+                }
+            }
+        }
+        
+        stage('Build Images') {
+            steps {
+                container('docker') {
+                    withCredentials([usernamePassword(credentialsId: 'docker-registry', passwordVariable: 'DOCKER_PASSWORD', usernameVariable: 'DOCKER_USERNAME')]) {
+                        sh "docker login -u ${DOCKER_USERNAME} -p ${DOCKER_PASSWORD} ${DOCKER_REGISTRY}"
+                        
+                        dir('backend') {
+                            sh "docker build -t ${BACKEND_IMAGE} ."
+                            sh "docker push ${BACKEND_IMAGE}"
+                        }
+                        
+                        dir('frontend') {
+                            sh "docker build -t ${FRONTEND_IMAGE} ."
+                            sh "docker push ${FRONTEND_IMAGE}"
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy to Development') {
+            steps {
+                container('kubectl') {
+                    withKubeConfig([credentialsId: 'kubeconfig']) {
+                        sh "kubectl apply -f k8s/namespace.yml"
+                        sh "sed -i 's|image:.*|image: ${BACKEND_IMAGE}|g' k8s/backend-deployment.yml"
+                        sh "sed -i 's|image:.*|image: ${FRONTEND_IMAGE}|g' k8s/deployment.yml"
+                        sh "kubectl apply -f k8s/"
+                    }
+                }
+            }
+        }
+        
+        stage('Integration Tests') {
+            steps {
+                container('node') {
+                    sh 'echo "Running integration tests..."'
+                    // Add integration test commands here
+                }
+            }
+        }
+        
+        stage('Deploy to Production') {
+            when {
+                branch 'main'
+            }
+            input {
+                message "Deploy to production?"
+                ok "Yes"
+            }
+            steps {
+                container('kubectl') {
+                    withKubeConfig([credentialsId: 'kubeconfig-prod']) {
+                        sh '''
+                            kubectl config use-context production
+                            helm upgrade --install devops-flow ./helm \
+                              --namespace devops-flow \
+                              --set backend.image=${BACKEND_IMAGE} \
+                              --set frontend.image=${FRONTEND_IMAGE}
+                        '''
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            junit '**/test-results/*.xml'
+            publishHTML([
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: 'coverage',
+                reportFiles: 'index.html',
+                reportName: 'Coverage Report'
+            ])
         }
     }
 }

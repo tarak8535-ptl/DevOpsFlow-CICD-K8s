@@ -1,0 +1,118 @@
+stages:
+  - test
+  - security
+  - build
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  BACKEND_IMAGE: ${CI_REGISTRY_IMAGE}/backend:${CI_COMMIT_REF_SLUG}
+  FRONTEND_IMAGE: ${CI_REGISTRY_IMAGE}/frontend:${CI_COMMIT_REF_SLUG}
+
+# Backend Jobs
+backend-test:
+  stage: test
+  image: node:18-alpine
+  script:
+    - cd backend
+    - npm ci
+    - npm run lint
+    - npm test
+  artifacts:
+    paths:
+      - backend/coverage/
+    expire_in: 1 week
+
+backend-security:
+  stage: security
+  image: 
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  script:
+    - cd backend
+    - trivy fs --exit-code 1 --severity HIGH,CRITICAL .
+  allow_failure: true
+
+backend-build:
+  stage: build
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  script:
+    - cd backend
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build -t $BACKEND_IMAGE .
+    - docker push $BACKEND_IMAGE
+  only:
+    - main
+    - staging
+
+# Frontend Jobs
+frontend-test:
+  stage: test
+  image: node:18-alpine
+  script:
+    - cd frontend
+    - npm ci
+    - npm run lint
+    - npm test
+  artifacts:
+    paths:
+      - frontend/coverage/
+    expire_in: 1 week
+
+frontend-security:
+  stage: security
+  image: 
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  script:
+    - cd frontend
+    - trivy fs --exit-code 1 --severity HIGH,CRITICAL .
+  allow_failure: true
+
+frontend-build:
+  stage: build
+  image: docker:20.10.16
+  services:
+    - docker:20.10.16-dind
+  script:
+    - cd frontend
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build -t $FRONTEND_IMAGE .
+    - docker push $FRONTEND_IMAGE
+  only:
+    - main
+    - staging
+
+# Deployment Jobs
+deploy-staging:
+  stage: deploy
+  image: 
+    name: bitnami/kubectl:latest
+    entrypoint: [""]
+  script:
+    - kubectl config use-context staging
+    - cd k8s
+    - kubectl apply -f namespace.yml
+    - sed -i "s|image:.*|image: $BACKEND_IMAGE|g" backend-deployment.yml
+    - kubectl apply -f .
+  environment:
+    name: staging
+  only:
+    - staging
+
+deploy-production:
+  stage: deploy
+  image:
+    name: argoproj/argocd:latest
+    entrypoint: [""]
+  script:
+    - argocd app sync devops-flow
+    - argocd app wait devops-flow
+  environment:
+    name: production
+  only:
+    - main
+  when: manual

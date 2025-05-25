@@ -1,13 +1,13 @@
 # DevOpsFlow-CICD-K8s
 
 ## Overview
-DevOpsFlow-CICD-K8s is a comprehensive full-stack application demonstrating modern DevOps practices with CI/CD pipeline and Kubernetes orchestration. It showcases:
+DevOpsFlow-CICD-K8s is a comprehensive full-stack application demonstrating modern DevOps practices with CI/CD pipeline and Kubernetes orchestration, using 100% open source tools. It showcases:
 - **Backend**: Node.js-based microservice architecture
 - **Frontend**: React application with responsive design
 - **Infrastructure as Code**: Kubernetes manifests and Helm charts
-- **CI/CD**: Automated Jenkins pipeline
+- **CI/CD**: GitLab CI or Jenkins pipelines
 - **Containerization**: Docker with multi-stage builds
-- **Observability**: Complete monitoring and logging stack
+- **Observability**: Prometheus, Grafana, and EFK stack
 
 ---
 
@@ -15,26 +15,28 @@ DevOpsFlow-CICD-K8s is a comprehensive full-stack application demonstrating mode
 - **Microservices Architecture**
   - RESTful API backend services
   - React-based frontend with modern UI/UX
-  - Service mesh integration ready
+  - Istio service mesh integration
 - **Kubernetes Deployment**
   - Production-grade manifests
   - Helm charts for environment templating
   - Horizontal Pod Autoscaling (HPA)
-  - ConfigMaps and Secrets management
+  - Sealed Secrets for secure configuration
 - **CI/CD Pipeline**
-  - Automated Jenkins workflow
-  - Multi-environment deployment strategy
-  - Automated testing and quality gates
+  - GitLab CI or Jenkins workflow
+  - ArgoCD for GitOps deployment
+  - SonarQube for code quality
+  - Trivy for container scanning
 - **Observability Stack**
   - Prometheus for metrics collection
   - Grafana dashboards for visualization
   - EFK (Elasticsearch, Fluentd, Kibana) for logging
-  - Distributed tracing support
+  - Jaeger for distributed tracing
 - **Security Features**
-  - Container image scanning
+  - JWT-based authentication and authorization
+  - Trivy and Clair for image scanning
+  - OPA Gatekeeper for policy enforcement
   - Kubernetes RBAC implementation
-  - Network policies
-  - Secret management
+  - Vault for secret management
 - **High Availability**
   - Pod disruption budgets
   - Multi-replica deployments
@@ -47,8 +49,13 @@ DevOpsFlow-CICD-K8s is a comprehensive full-stack application demonstrating mode
 DevOpsFlow-CICD-K8s/
 ├── backend/
 │   ├── src/
+│   │   ├── middleware/
+│   │   │   ├── auth.js
 │   │   ├── routes/
+│   │   │   ├── auth.js
 │   │   │   ├── dashboard.js
+│   │   │   ├── logs.js
+│   │   │   ├── monitoring.js
 │   │   ├── server.js
 │   ├── package.json
 │   ├── package-lock.json
@@ -77,18 +84,49 @@ DevOpsFlow-CICD-K8s/
 │   ├── namespace.yml
 │   ├── backend-deployment.yml
 │   ├── service.yml
+├── .gitlab-ci.yml
 ├── Jenkinsfile
 ├── .gitignore
 ```
 
 ---
 
+## Open Source Tools Used
+
+### Infrastructure
+- **Kubernetes**: Container orchestration
+- **Helm**: Package management for Kubernetes
+- **Istio**: Service mesh for microservices
+- **Cert-Manager**: Certificate management
+
+### CI/CD
+- **GitLab CI**: Continuous integration and delivery
+- **Jenkins**: Automation server
+- **ArgoCD**: GitOps continuous delivery
+- **Tekton**: Cloud-native CI/CD
+
+### Monitoring & Observability
+- **Prometheus**: Metrics collection and alerting
+- **Grafana**: Metrics visualization
+- **Elasticsearch**: Log storage and search
+- **Fluentd**: Log collection and forwarding
+- **Kibana**: Log visualization
+- **Jaeger**: Distributed tracing
+
+### Security
+- **Trivy**: Container vulnerability scanner
+- **OPA Gatekeeper**: Policy enforcement
+- **Vault**: Secret management
+- **Falco**: Runtime security monitoring
+
+---
+
 ## Prerequisites
-- Docker Desktop 4.x or newer
-- Kubernetes 1.24+ cluster
+- Docker 20.x or newer
+- Kubernetes 1.24+ cluster (Minikube, k3s, or kind for local development)
 - Helm 3.x
 - Node.js 18.x or newer
-- Jenkins 2.x with Kubernetes plugin
+- GitLab Runner or Jenkins
 
 ---
 
@@ -141,85 +179,121 @@ helm install devops-flow ./helm --namespace devops-flow
 
 ---
 
-## CI/CD Pipeline Stages
+## CI/CD Pipeline Implementation
 
-1. **Source Control**
-   - Git checkout
-   - Code quality checks
-   - Security scanning
+### GitLab CI Pipeline
+The `.gitlab-ci.yml` file defines a pipeline with the following stages:
 
-2. **Build & Test**
+1. **Build & Test**
    - Dependencies installation
-   - Unit tests
-   - Integration tests
-   - Code coverage
+   - Unit and integration tests
+   - SonarQube code quality analysis
+
+2. **Security Scan**
+   - Trivy container scanning
+   - OWASP dependency check
+   - Secret scanning with git-secrets
 
 3. **Container Build**
    - Multi-stage Docker builds
-   - Image scanning
+   - Container registry push
+
+4. **Deployment**
+   - ArgoCD application deployment
+   - Kubernetes manifest application
+
+### Jenkins Pipeline
+The `Jenkinsfile` implements:
+
+1. **Source Control**
+   - Git checkout
+   - Code quality checks with SonarQube
+
+2. **Build & Test**
+   - Dependencies installation
+   - Unit and integration tests
+
+3. **Container Build**
+   - Multi-stage Docker builds
+   - Trivy image scanning
    - Registry push
 
 4. **Kubernetes Deployment**
    - Namespace configuration
-   - Secret injection
+   - Secret injection with Vault
    - Rolling updates
 
-5. **Validation**
-   - Health checks
-   - Smoke tests
-   - Performance validation
-
 ---
 
-## Configuration
+## Observability Setup
 
-### Backend Environment Variables
-```env
-PORT=5000
-NODE_ENV=development
-DATABASE_URL=mongodb://localhost:27017/devops
-LOG_LEVEL=info
+### Prometheus & Grafana
+```bash
+# Install Prometheus Operator
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm install prometheus prometheus-community/kube-prometheus-stack
+
+# Access Grafana
+kubectl port-forward svc/prometheus-grafana 3000:80
 ```
 
-### Frontend Environment Variables
-```env
-REACT_APP_API_URL=http://localhost:5000
-REACT_APP_ENV=development
-```
+### EFK Stack
+```bash
+# Install Elasticsearch
+helm repo add elastic https://helm.elastic.co
+helm install elasticsearch elastic/elasticsearch
 
-### Kubernetes ConfigMap Example
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: app-config
-data:
-  NODE_ENV: production
-  LOG_LEVEL: info
+# Install Fluentd
+helm repo add fluent https://fluent.github.io/helm-charts
+helm install fluentd fluent/fluentd
+
+# Install Kibana
+helm install kibana elastic/kibana
 ```
 
 ---
 
-## Best Practices
+## Security Implementation
 
-### Security
-- Regular security patches
-- RBAC implementation
-- Network policies
-- Secret rotation
-- Image scanning
+### Authentication & Authorization
+The application implements a JWT-based authentication and authorization system:
+- Login endpoint at `/api/auth/login` for obtaining JWT tokens
+- Token verification middleware that protects sensitive routes
+- Protected routes: `/api/dashboard`, `/api/logs`, `/api/monitoring`
 
-### Monitoring
-- Resource utilization metrics
-- Application performance monitoring
-- Alert configuration
-- Log aggregation
+Example API usage:
+```bash
+# Login to get a token
+curl -X POST http://localhost:5000/api/auth/login -H "Content-Type: application/json" -d '{"username":"admin","password":"password"}'
 
-### High Availability
-- Multi-replica deployments
-- Pod anti-affinity rules
-- Resource limits and requests
-- Liveness and readiness probes
+# Access protected routes with the token
+curl http://localhost:5000/api/dashboard -H "Authorization: Bearer fake-jwt-token"
+```
+
+### Container Scanning
+```bash
+# Scan container image with Trivy
+trivy image backend:latest
+```
+
+### Secret Management with Vault
+```bash
+# Install Vault
+helm repo add hashicorp https://helm.releases.hashicorp.com
+helm install vault hashicorp/vault
+
+# Initialize Vault
+kubectl exec vault-0 -- vault operator init
+```
+
+### OPA Gatekeeper
+```bash
+# Install OPA Gatekeeper
+kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
+
+# Apply policy
+kubectl apply -f policies/require-labels.yaml
+```
 
 ---
 
@@ -233,9 +307,10 @@ data:
 2. **Service Discovery Issues**
    - Validate service: `kubectl get svc`
    - Check endpoints: `kubectl get endpoints`
+   - Verify Istio configuration: `istioctl analyze`
 
 3. **Pipeline Failures**
-   - Review Jenkins logs
+   - Review CI logs
    - Verify credentials
    - Check resource constraints
 
