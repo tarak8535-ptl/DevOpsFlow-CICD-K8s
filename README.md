@@ -5,7 +5,7 @@ DevOpsFlow-CICD-K8s is a comprehensive full-stack application demonstrating mode
 - **Backend**: Node.js-based microservice architecture
 - **Frontend**: React application with responsive design
 - **Infrastructure as Code**: Kubernetes manifests and Helm charts
-- **CI/CD**: GitHub Actions pipelines
+- **CI/CD**: GitHub Actions or Bitbucket Pipelines
 - **Containerization**: Docker with multi-stage builds
 - **Observability**: Prometheus, Grafana, and EFK stack
 
@@ -24,6 +24,7 @@ DevOpsFlow-CICD-K8s is a comprehensive full-stack application demonstrating mode
   - Resource limits and health probes
 - **CI/CD Pipeline**
   - GitHub Actions workflow
+  - Bitbucket Pipelines support
   - ArgoCD for GitOps deployment
   - SonarQube for code quality
   - Trivy for container scanning
@@ -92,6 +93,7 @@ DevOpsFlow-CICD-K8s/
 ├── .github/
 │   ├── workflows/
 │   │   ├── ci-cd.yml
+├── bitbucket-pipelines.yml
 ├── .gitignore
 ```
 
@@ -107,6 +109,7 @@ DevOpsFlow-CICD-K8s/
 
 ### CI/CD
 - **GitHub Actions**: Continuous integration and delivery
+- **Bitbucket Pipelines**: Integrated CI/CD for Bitbucket
 - **ArgoCD**: GitOps continuous delivery
 - **Tekton**: Cloud-native CI/CD
 
@@ -131,7 +134,7 @@ DevOpsFlow-CICD-K8s/
 - Kubernetes 1.24+ cluster (Minikube, k3s, or kind for local development)
 - Helm 3.x
 - Node.js 18.x or newer
-- GitHub account with Actions enabled
+- GitHub account with Actions enabled or Bitbucket account with Pipelines enabled
 
 ---
 
@@ -226,6 +229,34 @@ The workflow includes:
 - Manual approval required for production deployment
 - Artifact storage for test coverage reports
 - Caching for faster builds
+
+### Bitbucket Pipelines
+The `bitbucket-pipelines.yml` file implements a similar pipeline structure:
+
+1. **Build & Test**
+   - Parallel test execution for backend and frontend
+   - Dependency caching for faster builds
+   - Artifact collection for test reports
+
+2. **Security Scan**
+   - Trivy integration via Bitbucket Pipes
+   - Vulnerability scanning for application code
+
+3. **Container Build**
+   - Docker image building and pushing to Docker Hub
+   - Branch-based image tagging
+
+4. **Deployment**
+   - Kubernetes deployment using kubectl Pipe
+   - ArgoCD integration for GitOps workflow
+   - Manual trigger for production deployment
+
+The pipeline leverages Bitbucket-specific features:
+- Reusable step definitions
+- Bitbucket Pipes for standardized operations
+- Branch-specific workflows
+- Pull request validation
+- Deployment environments with approvals
 
 ---
 
@@ -332,9 +363,10 @@ kubectl apply -f policies/require-labels.yaml
 
 3. **Pipeline Failures**
    - Review GitHub Actions logs in the Actions tab
-   - Verify GitHub secrets are properly configured
+   - For Bitbucket Pipelines, check the Pipelines section in your repository
+   - Verify secrets are properly configured (GitHub Secrets or Bitbucket Repository Variables)
    - Check resource constraints in workflow runners
-   - Ensure proper permissions for GITHUB_TOKEN
+   - Ensure proper permissions for GITHUB_TOKEN or Bitbucket Pipeline permissions
 
 4. **Authentication Issues**
    - Verify token format: `Authorization: Bearer <token>`

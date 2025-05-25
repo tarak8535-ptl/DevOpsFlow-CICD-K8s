@@ -33,9 +33,6 @@ docker-compose.override.yml
 .dockerignore
 
 # CI/CD
-/.github/
-.Jenkinsfile
-coverage/
 
 # Misc
 *.log
