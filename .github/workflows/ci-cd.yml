@@ -52,29 +52,6 @@ jobs:
           format: 'table'
         continue-on-error: true
 
-  backend-build:
-    runs-on: ubuntu-latest
-    needs: [backend-test, backend-security]
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
-    steps:
-      - uses: actions/checkout@v3
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push backend image
-        uses: docker/build-push-action@v4
-        with:
-          context: ./backend
-          push: true
-          tags: ghcr.io/${{ env.BACKEND_IMAGE }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
   # Frontend Jobs
   frontend-test:
     runs-on: ubuntu-latest
@@ -116,9 +93,10 @@ jobs:
           format: 'table'
         continue-on-error: true
 
-  frontend-build:
+  # Build Jobs
+  build:
     runs-on: ubuntu-latest
-    needs: [frontend-test, frontend-security]
+    needs: [backend-test, backend-security, frontend-test, frontend-security]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
     steps:
       - uses: actions/checkout@v3
@@ -130,6 +108,16 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Build and push backend image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          push: true
+          tags: ghcr.io/${{ env.BACKEND_IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
       - name: Build and push frontend image
         uses: docker/build-push-action@v4
         with:
@@ -142,7 +130,7 @@ jobs:
   # Deployment Jobs
   deploy-staging:
     runs-on: ubuntu-latest
-    needs: [backend-build, frontend-build]
+    needs: [build]
     if: github.ref == 'refs/heads/staging'
     environment: staging
     steps:
@@ -162,7 +150,7 @@ jobs:
 
   deploy-production:
     runs-on: ubuntu-latest
-    needs: [backend-build, frontend-build]
+    needs: [build]
     if: github.ref == 'refs/heads/main'
     environment: production
     steps:

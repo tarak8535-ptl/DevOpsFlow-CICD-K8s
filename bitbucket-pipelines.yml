@@ -110,24 +110,32 @@ definitions:
 pipelines:
   branches:
     main:
-      - step: *backend-test
-      - step: *backend-security
-      - step: *frontend-test
-      - step: *frontend-security
-      - step: *backend-build
-      - step: *frontend-build
+      - parallel:
+          - step: *backend-test
+          - step: *frontend-test
+      - parallel:
+          - step: *backend-security
+          - step: *frontend-security
+      - parallel:
+          - step: *backend-build
+          - step: *frontend-build
       - step: *deploy-production
     staging:
-      - step: *backend-test
-      - step: *backend-security
-      - step: *frontend-test
-      - step: *frontend-security
-      - step: *backend-build
-      - step: *frontend-build
+      - parallel:
+          - step: *backend-test
+          - step: *frontend-test
+      - parallel:
+          - step: *backend-security
+          - step: *frontend-security
+      - parallel:
+          - step: *backend-build
+          - step: *frontend-build
       - step: *deploy-staging
   pull-requests:
     '**':
-      - step: *backend-test
-      - step: *backend-security
-      - step: *frontend-test
-      - step: *frontend-security
+      - parallel:
+          - step: *backend-test
+          - step: *frontend-test
+      - parallel:
+          - step: *backend-security
+          - step: *frontend-security

@@ -1,0 +1,47 @@
+DevOpsFlow-CICD-K8s/
+├── .github/
+│   └── workflows/
+│       └── ci-cd.yml
+├── backend/
+│   ├── src/
+│   │   ├── middleware/
+│   │   │   └── auth.js
+│   │   ├── routes/
+│   │   │   ├── auth.js
+│   │   │   ├── dashboard.js
+│   │   │   ├── logs.js
+│   │   │   └── monitoring.js
+│   │   └── server.js
+│   ├── Dockerfile
+│   └── package.json
+├── frontend/
+│   ├── nginx/
+│   │   └── nginx.conf
+│   ├── public/
+│   │   └── index.html
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── Dashboard.js
+│   │   │   ├── DeploymentLogs.js
+│   │   │   ├── Login.js
+│   │   │   └── Monitoring.js
+│   │   ├── App.js
+│   │   └── index.js
+│   ├── Dockerfile
+│   ├── Jenkinsfile
+│   └── package.json
+├── helm/
+│   ├── templates/
+│   │   └── deployment.yaml
+│   ├── Chart.yml
+│   └── values.yml
+├── k8s/
+│   ├── backend-deployment.yml
+│   ├── deployment.yml
+│   ├── ingress.yml
+│   ├── namespace.yml
+│   └── service.yml
+├── .gitignore
+├── bitbucket-pipelines.yml
+├── Jenkinsfile
+└── README.md

@@ -5,7 +5,7 @@ DevOpsFlow-CICD-K8s is a comprehensive full-stack application demonstrating mode
 - **Backend**: Node.js-based microservice architecture
 - **Frontend**: React application with responsive design
 - **Infrastructure as Code**: Kubernetes manifests and Helm charts
-- **CI/CD**: GitHub Actions or Bitbucket Pipelines
+- **CI/CD**: GitHub Actions, Bitbucket Pipelines, or Jenkins
 - **Containerization**: Docker with multi-stage builds
 - **Observability**: Prometheus, Grafana, and EFK stack
 
@@ -25,6 +25,7 @@ DevOpsFlow-CICD-K8s is a comprehensive full-stack application demonstrating mode
 - **CI/CD Pipeline**
   - GitHub Actions workflow
   - Bitbucket Pipelines support
+  - Jenkins pipeline integration
   - ArgoCD for GitOps deployment
   - SonarQube for code quality
   - Trivy for container scanning
@@ -53,48 +54,51 @@ DevOpsFlow-CICD-K8s is a comprehensive full-stack application demonstrating mode
 ## File Structure
 ```
 DevOpsFlow-CICD-K8s/
+├── .github/
+│   └── workflows/
+│       └── ci-cd.yml                # GitHub Actions workflow configuration
 ├── backend/
 │   ├── src/
 │   │   ├── middleware/
-│   │   │   ├── auth.js
+│   │   │   └── auth.js              # Authentication middleware
 │   │   ├── routes/
-│   │   │   ├── auth.js
-│   │   │   ├── dashboard.js
-│   │   │   ├── logs.js
-│   │   │   ├── monitoring.js
-│   │   ├── server.js
-│   ├── package.json
-│   ├── package-lock.json
-│   ├── Dockerfile
-│   ├── .dockerignore
-│   ├── .env
+│   │   │   ├── auth.js              # Authentication routes
+│   │   │   ├── dashboard.js         # Dashboard API endpoints
+│   │   │   ├── logs.js              # Logging API endpoints
+│   │   │   └── monitoring.js        # Monitoring API endpoints
+│   │   └── server.js                # Main server entry point
+│   ├── Dockerfile                   # Backend container definition
+│   └── package.json                 # Backend dependencies
 ├── frontend/
+│   ├── nginx/
+│   │   └── nginx.conf               # Nginx configuration for frontend
 │   ├── public/
-│   │   ├── index.html
+│   │   └── index.html               # HTML entry point
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── Dashboard.js
-│   │   ├── App.js
-│   │   ├── index.js
-│   ├── package.json
-│   ├── package-lock.json
-│   ├── Dockerfile
-│   ├── .dockerignore
-│   ├── .env
+│   │   │   ├── Dashboard.js         # Dashboard component
+│   │   │   ├── DeploymentLogs.js    # Logs display component
+│   │   │   ├── Login.js             # Authentication component
+│   │   │   └── Monitoring.js        # Monitoring component
+│   │   ├── App.js                   # Main React component
+│   │   └── index.js                 # React entry point
+│   ├── Dockerfile                   # Frontend container definition
+│   └── package.json                 # Frontend dependencies
 ├── helm/
 │   ├── templates/
-│   │   ├── deployment.yaml
-│   │   ├── service.yaml
-│   ├── values.yaml
+│   │   └── deployment.yaml          # Kubernetes deployment template
+│   ├── Chart.yml                    # Helm chart definition
+│   └── values.yml                   # Helm values configuration
 ├── k8s/
-│   ├── namespace.yml
-│   ├── backend-deployment.yml
-│   ├── service.yml
-├── .github/
-│   ├── workflows/
-│   │   ├── ci-cd.yml
-├── bitbucket-pipelines.yml
-├── .gitignore
+│   ├── backend-deployment.yml       # Backend Kubernetes deployment
+│   ├── deployment.yml               # Main Kubernetes deployment
+│   ├── ingress.yml                  # Ingress configuration
+│   ├── namespace.yml                # Namespace definition
+│   └── service.yml                  # Service definition
+├── .gitignore                       # Git ignore file
+├── bitbucket-pipelines.yml          # Bitbucket Pipelines configuration
+├── Jenkinsfile                      # Jenkins pipeline definition
+└── README.md                        # Project documentation
 ```
 
 ---
@@ -110,6 +114,7 @@ DevOpsFlow-CICD-K8s/
 ### CI/CD
 - **GitHub Actions**: Continuous integration and delivery
 - **Bitbucket Pipelines**: Integrated CI/CD for Bitbucket
+- **Jenkins**: Self-hosted automation server
 - **ArgoCD**: GitOps continuous delivery
 - **Tekton**: Cloud-native CI/CD
 
@@ -134,7 +139,7 @@ DevOpsFlow-CICD-K8s/
 - Kubernetes 1.24+ cluster (Minikube, k3s, or kind for local development)
 - Helm 3.x
 - Node.js 18.x or newer
-- GitHub account with Actions enabled or Bitbucket account with Pipelines enabled
+- GitHub account with Actions enabled, Bitbucket account with Pipelines enabled, or Jenkins server
 
 ---
 
@@ -181,6 +186,29 @@ kubectl get pods -n devops
 kubectl get pods -n devops -o jsonpath='{.items[*].spec.containers[*].securityContext}'
 ```
 
+## Deployment Flow
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│                 │     │                 │     │                 │
+│  Git Push       │────▶│  CI/CD Pipeline │────▶│  Container      │
+│                 │     │                 │     │  Registry       │
+│                 │     │                 │     │                 │
+└─────────────────┘     └─────────────────┘     └────────┬────────┘
+                                                         │
+                                                         ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                                                                     │
+│  ┌─────────────────┐     ┌─────────────────┐    ┌──────────────┐    │
+│  │                 │     │                 │    │              │    │
+│  │  ArgoCD         │────▶│  Kubernetes     │───▶│ Application  │    │
+│  │  GitOps         │     │  API Server     │    │ Deployment   │    │
+│  │                 │     │                 │    │              │    │
+│  └─────────────────┘     └─────────────────┘    └──────────────┘    │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
 ### Helm Installation
 ```bash
 helm install devops-flow ./helm --namespace devops
@@ -199,6 +227,31 @@ curl http://localhost:5000/api/dashboard \
 ```
 
 ---
+
+## CI/CD Pipeline Flow
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│                 │     │                 │     │                 │     │                 │
+│  Code Changes   │────▶│  Test & Scan    │────▶│  Build & Push   │────▶│    Deploy       │
+│                 │     │                 │     │                 │     │                 │
+└─────────────────┘     └─────────────────┘     └─────────────────┘     └─────────────────┘
+        │                       │                       │                       │
+        ▼                       ▼                       ▼                       ▼
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Git Push       │     │  Unit Tests     │     │  Docker Build   │     │  Staging        │
+│  Pull Request   │     │  Linting        │     │  Image Tagging  │     │  (Automatic)    │
+│  Branch Merge   │     │  Security Scan  │     │  Registry Push  │     │                 │
+└─────────────────┘     └─────────────────┘     └─────────────────┘     └─────────────────┘
+                                                                                │
+                                                                                │
+                                                                                ▼
+                                                                        ┌─────────────────┐
+                                                                        │  Production     │
+                                                                        │  (Manual        │
+                                                                        │   Approval)     │
+                                                                        └─────────────────┘
+```
 
 ## CI/CD Pipeline Implementation
 
@@ -224,7 +277,7 @@ The `.github/workflows/ci-cd.yml` file defines a pipeline with the following sta
    - Kubernetes manifest application
 
 The workflow includes:
-- Separate jobs for backend and frontend components
+- Parallel execution of backend and frontend tests
 - Automatic deployment to staging for the staging branch
 - Manual approval required for production deployment
 - Artifact storage for test coverage reports
@@ -258,7 +311,83 @@ The pipeline leverages Bitbucket-specific features:
 - Pull request validation
 - Deployment environments with approvals
 
+### Jenkins Pipeline
+The `Jenkinsfile` defines a declarative pipeline with these key stages:
+
+1. **Testing**
+   - Parallel execution of backend and frontend tests
+   - Docker-based Node.js agents for consistent environments
+   - JUnit test reporting and HTML coverage reports
+
+2. **Security Scanning**
+   - Parallel Trivy scans for backend and frontend code
+   - Vulnerability assessment with configurable severity levels
+
+3. **Build & Push**
+   - Conditional image building for main and staging branches
+   - Secure credential handling for registry authentication
+   - Optimized build process for efficiency
+
+4. **Deployment**
+   - Branch-specific deployment strategies
+   - Kubernetes integration with kubectl
+   - Manual approval gate for production deployments
+   - ArgoCD integration for GitOps workflow
+
+The pipeline includes:
+- Workspace cleanup to ensure clean builds
+- Credential management for secure operations
+- Detailed reporting and visualization of test results
+- Parallel execution for improved performance
+
 ---
+
+## CI/CD Platform Comparison
+
+| Feature | GitHub Actions | Bitbucket Pipelines | Jenkins |
+|---------|---------------|---------------------|---------|
+| **Hosting** | Cloud-hosted | Cloud-hosted | Self-hosted |
+| **Configuration** | YAML | YAML | Groovy DSL |
+| **Container Registry** | GitHub Container Registry | Docker Hub | Any registry |
+| **Parallelism** | Job-level | Step-level | Stage-level |
+| **Caching** | Built-in | Built-in | Plugin-based |
+| **Approvals** | Environment protection rules | Deployment permissions | Input steps |
+| **Secrets** | GitHub Secrets | Repository Variables | Credentials plugin |
+| **Reporting** | Built-in | Built-in | Plugin-based |
+| **Scalability** | Auto-scaling | Auto-scaling | Manual scaling |
+| **Integration** | GitHub ecosystem | Atlassian ecosystem | Plugin ecosystem |
+
+---
+
+## Application Architecture Flow
+
+```
+                                  ┌─────────────────┐
+                                  │                 │
+                                  │    Internet     │
+                                  │                 │
+                                  └────────┬────────┘
+                                           │
+                                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                           Kubernetes Cluster                        │
+│                                                                     │
+│  ┌─────────────────┐     ┌─────────────────┐    ┌──────────────┐    │
+│  │                 │     │                 │    │              │    │
+│  │    Ingress      │────▶│    Frontend     │───▶│   Backend    │    │
+│  │    Controller   │     │    Service      │    │   Service    │    │
+│  │                 │     │                 │    │              │    │
+│  └─────────────────┘     └─────────────────┘    └──────┬───────┘    │
+│                                                        │            │
+│                                                        ▼            │
+│                                                 ┌──────────────┐    │
+│                                                 │  Database    │    │
+│                                                 │  Service     │    │
+│                                                 │              │    │
+│                                                 └──────────────┘    │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
 ## Observability Setup
 
@@ -288,7 +417,78 @@ helm install kibana elastic/kibana
 
 ---
 
+## Observability Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                           Kubernetes Cluster                        │
+│                                                                     │
+│  ┌─────────────────┐     ┌─────────────────┐    ┌──────────────┐    │
+│  │                 │     │                 │    │              │    │
+│  │    Frontend     │     │    Backend      │    │  Database    │    │
+│  │    Pods         │     │    Pods         │    │  Pods        │    │
+│  │                 │     │                 │    │              │    │
+│  └────────┬────────┘     └────────┬────────┘    └──────┬───────┘    │
+│           │                       │                     │           │
+│           │                       │                     │           │
+│           ▼                       ▼                     ▼           │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │                                                             │    │
+│  │                   Prometheus Metrics                        │    │
+│  │                                                             │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+│                                │                                    │
+│                                ▼                                    │
+│  ┌─────────────────┐     ┌─────────────────┐    ┌──────────────┐    │
+│  │                 │     │                 │    │              │    │
+│  │    Grafana      │     │    Fluentd      │    │ Elasticsearch│    │
+│  │    Dashboards   │     │    Collectors   │    │              │    │
+│  │                 │     │                 │    │              │    │
+│  └─────────────────┘     └────────┬────────┘    └──────┬───────┘    │
+│                                   │                     │           │
+│                                   │                     │           │
+│                                   ▼                     ▼           │
+│                          ┌─────────────────┐    ┌──────────────┐    │
+│                          │                 │    │              │    │
+│                          │    Alerts       │    │   Kibana     │    │
+│                          │                 │    │              │    │
+│                          └─────────────────┘    └──────────────┘    │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
 ## Security Implementation
+
+## Security Flow
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│                 │     │                 │     │                 │
+│  Source Code    │────▶│  Dependencies   │────▶│  Container      │
+│  Security Scan  │     │  Security Scan  │     │  Security Scan  │
+│                 │     │                 │     │                 │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+        │                       │                       │
+        ▼                       ▼                       ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                           Kubernetes Cluster                        │
+│                                                                     │
+│  ┌─────────────────┐     ┌─────────────────┐    ┌──────────────┐    │
+│  │                 │     │                 │    │              │    │
+│  │  OPA Gatekeeper │────▶│  RBAC Policies  │───▶│ Pod Security │    │
+│  │  Policies       │     │                 │    │ Context      │    │
+│  │                 │     │                 │    │              │    │
+│  └─────────────────┘     └─────────────────┘    └──────────────┘    │
+│                                                                     │
+│  ┌─────────────────┐     ┌─────────────────┐    ┌──────────────┐    │
+│  │                 │     │                 │    │              │    │
+│  │  Network        │────▶│  Vault Secret   │───▶│ Runtime      │    │
+│  │  Policies       │     │  Management     │    │ Security     │    │
+│  │                 │     │                 │    │              │    │
+│  └─────────────────┘     └─────────────────┘    └──────────────┘    │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
 ### Authentication & Authorization
 The application implements a robust authentication and authorization system:
@@ -364,9 +564,10 @@ kubectl apply -f policies/require-labels.yaml
 3. **Pipeline Failures**
    - Review GitHub Actions logs in the Actions tab
    - For Bitbucket Pipelines, check the Pipelines section in your repository
-   - Verify secrets are properly configured (GitHub Secrets or Bitbucket Repository Variables)
-   - Check resource constraints in workflow runners
-   - Ensure proper permissions for GITHUB_TOKEN or Bitbucket Pipeline permissions
+   - For Jenkins, check the build console output and Blue Ocean visualization
+   - Verify secrets are properly configured (GitHub Secrets, Bitbucket Variables, or Jenkins Credentials)
+   - Check resource constraints in workflow runners or Jenkins agents
+   - Ensure proper permissions for GITHUB_TOKEN, Bitbucket Pipeline permissions, or Jenkins credentials
 
 4. **Authentication Issues**
    - Verify token format: `Authorization: Bearer <token>`
