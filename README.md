@@ -1,11 +1,11 @@
-# DevOpsFlow-CICD-K8s
+# DevOpsFlow-GitHub-K8s
 
 ## Overview
 DevOpsFlow-CICD-K8s is a comprehensive full-stack application demonstrating modern DevOps practices with CI/CD pipeline and Kubernetes orchestration, using 100% open source tools. It showcases:
 - **Backend**: Node.js-based microservice architecture
 - **Frontend**: React application with responsive design
 - **Infrastructure as Code**: Kubernetes manifests and Helm charts
-- **CI/CD**: GitLab CI or Jenkins pipelines
+- **CI/CD**: GitHub Actions pipelines
 - **Containerization**: Docker with multi-stage builds
 - **Observability**: Prometheus, Grafana, and EFK stack
 
@@ -17,22 +17,27 @@ DevOpsFlow-CICD-K8s is a comprehensive full-stack application demonstrating mode
   - React-based frontend with modern UI/UX
   - Istio service mesh integration
 - **Kubernetes Deployment**
-  - Production-grade manifests
+  - Production-grade manifests with security contexts
   - Helm charts for environment templating
   - Horizontal Pod Autoscaling (HPA)
   - Sealed Secrets for secure configuration
+  - Resource limits and health probes
 - **CI/CD Pipeline**
-  - GitLab CI or Jenkins workflow
+  - GitHub Actions workflow
   - ArgoCD for GitOps deployment
   - SonarQube for code quality
   - Trivy for container scanning
 - **Observability Stack**
-  - Prometheus for metrics collection
+  - Prometheus for metrics collection with authentication
   - Grafana dashboards for visualization
   - EFK (Elasticsearch, Fluentd, Kibana) for logging
   - Jaeger for distributed tracing
 - **Security Features**
-  - JWT-based authentication and authorization
+  - JWT-based authentication with brute force protection
+  - Secure token verification with timing attack prevention
+  - Enhanced web security headers (CSP, HSTS)
+  - Rate limiting and payload size restrictions
+  - Non-root container execution with least privilege
   - Trivy and Clair for image scanning
   - OPA Gatekeeper for policy enforcement
   - Kubernetes RBAC implementation
@@ -84,8 +89,9 @@ DevOpsFlow-CICD-K8s/
 │   ├── namespace.yml
 │   ├── backend-deployment.yml
 │   ├── service.yml
-├── .gitlab-ci.yml
-├── Jenkinsfile
+├── .github/
+│   ├── workflows/
+│   │   ├── ci-cd.yml
 ├── .gitignore
 ```
 
@@ -100,8 +106,7 @@ DevOpsFlow-CICD-K8s/
 - **Cert-Manager**: Certificate management
 
 ### CI/CD
-- **GitLab CI**: Continuous integration and delivery
-- **Jenkins**: Automation server
+- **GitHub Actions**: Continuous integration and delivery
 - **ArgoCD**: GitOps continuous delivery
 - **Tekton**: Cloud-native CI/CD
 
@@ -126,7 +131,7 @@ DevOpsFlow-CICD-K8s/
 - Kubernetes 1.24+ cluster (Minikube, k3s, or kind for local development)
 - Helm 3.x
 - Node.js 18.x or newer
-- GitLab Runner or Jenkins
+- GitHub account with Actions enabled
 
 ---
 
@@ -152,12 +157,12 @@ npm start
 # Backend
 cd backend
 docker build -t backend:latest .
-docker run -p 5000:5000 backend:latest
+docker run -p 5000:5000 --user 1001 backend:latest
 
 # Frontend
 cd frontend
 docker build -t frontend:latest .
-docker run -p 3000:3000 frontend:latest
+docker run -p 80:80 --user nginx frontend:latest
 ```
 
 ### Kubernetes Deployment
@@ -169,20 +174,33 @@ kubectl apply -f k8s/namespace.yml
 kubectl apply -f k8s/
 
 # Verify deployment
-kubectl get pods -n devops-flow
+kubectl get pods -n devops
+kubectl get pods -n devops -o jsonpath='{.items[*].spec.containers[*].securityContext}'
 ```
 
 ### Helm Installation
 ```bash
-helm install devops-flow ./helm --namespace devops-flow
+helm install devops-flow ./helm --namespace devops
+```
+
+### Testing Authentication
+```bash
+# Login to get token
+curl -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"password"}'
+
+# Access protected endpoint
+curl http://localhost:5000/api/dashboard \
+  -H "Authorization: Bearer fake-jwt-token"
 ```
 
 ---
 
 ## CI/CD Pipeline Implementation
 
-### GitLab CI Pipeline
-The `.gitlab-ci.yml` file defines a pipeline with the following stages:
+### GitHub Actions Pipeline
+The `.github/workflows/ci-cd.yml` file defines a pipeline with the following stages:
 
 1. **Build & Test**
    - Dependencies installation
@@ -196,32 +214,18 @@ The `.gitlab-ci.yml` file defines a pipeline with the following stages:
 
 3. **Container Build**
    - Multi-stage Docker builds
-   - Container registry push
+   - Container registry push to GitHub Container Registry (GHCR)
 
 4. **Deployment**
    - ArgoCD application deployment
    - Kubernetes manifest application
 
-### Jenkins Pipeline
-The `Jenkinsfile` implements:
-
-1. **Source Control**
-   - Git checkout
-   - Code quality checks with SonarQube
-
-2. **Build & Test**
-   - Dependencies installation
-   - Unit and integration tests
-
-3. **Container Build**
-   - Multi-stage Docker builds
-   - Trivy image scanning
-   - Registry push
-
-4. **Kubernetes Deployment**
-   - Namespace configuration
-   - Secret injection with Vault
-   - Rolling updates
+The workflow includes:
+- Separate jobs for backend and frontend components
+- Automatic deployment to staging for the staging branch
+- Manual approval required for production deployment
+- Artifact storage for test coverage reports
+- Caching for faster builds
 
 ---
 
@@ -256,10 +260,10 @@ helm install kibana elastic/kibana
 ## Security Implementation
 
 ### Authentication & Authorization
-The application implements a JWT-based authentication and authorization system:
-- Login endpoint at `/api/auth/login` for obtaining JWT tokens
-- Token verification middleware that protects sensitive routes
-- Protected routes: `/api/dashboard`, `/api/logs`, `/api/monitoring`
+The application implements a robust authentication and authorization system:
+- Login endpoint at `/api/auth/login` for obtaining JWT tokens with rate limiting to prevent brute force attacks
+- Secure token verification middleware using constant-time comparison to prevent timing attacks
+- Protected routes: `/api/dashboard`, `/api/logs`, `/api/monitoring`, `/metrics`
 
 Example API usage:
 ```bash
@@ -270,11 +274,27 @@ curl -X POST http://localhost:5000/api/auth/login -H "Content-Type: application/
 curl http://localhost:5000/api/dashboard -H "Authorization: Bearer fake-jwt-token"
 ```
 
-### Container Scanning
+### Container Security
 ```bash
 # Scan container image with Trivy
 trivy image backend:latest
 ```
+
+### Kubernetes Security
+- Non-root container execution
+- Read-only root filesystem
+- Dropped capabilities
+- Resource limits and requests
+- Security contexts with seccomp profiles
+- Health probes for liveness and readiness
+
+### Web Security
+- Strict Content Security Policy (CSP)
+- HTTP Strict Transport Security (HSTS)
+- XSS protection headers
+- CORS restrictions
+- Request rate limiting
+- Payload size limits
 
 ### Secret Management with Vault
 ```bash
@@ -303,6 +323,7 @@ kubectl apply -f policies/require-labels.yaml
 1. **Pod Startup Failures**
    - Check logs: `kubectl logs <pod-name>`
    - Verify resources: `kubectl describe pod <pod-name>`
+   - Check security contexts: `kubectl get pod <pod-name> -o yaml | grep -A 20 securityContext`
 
 2. **Service Discovery Issues**
    - Validate service: `kubectl get svc`
@@ -310,9 +331,20 @@ kubectl apply -f policies/require-labels.yaml
    - Verify Istio configuration: `istioctl analyze`
 
 3. **Pipeline Failures**
-   - Review CI logs
-   - Verify credentials
-   - Check resource constraints
+   - Review GitHub Actions logs in the Actions tab
+   - Verify GitHub secrets are properly configured
+   - Check resource constraints in workflow runners
+   - Ensure proper permissions for GITHUB_TOKEN
+
+4. **Authentication Issues**
+   - Verify token format: `Authorization: Bearer <token>`
+   - Check for rate limiting lockouts
+   - Ensure proper CORS configuration for cross-origin requests
+
+5. **Security Policy Failures**
+   - Check container security contexts
+   - Verify resource limits are properly set
+   - Review OPA Gatekeeper policies
 
 ---
 

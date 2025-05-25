@@ -43,11 +43,30 @@ const httpRequestDurationMicroseconds = new promClient.Histogram({
   registers: [register]
 });
 
-// Middleware
-app.use(cors());
-app.use(helmet()); // Security headers
+// Middleware with enhanced security
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS || 'http://localhost:3000',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// Enhanced security headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'"],
+      imgSrc: ["'self'"],
+    },
+  },
+  xssFilter: true,
+  noSniff: true,
+  referrerPolicy: { policy: 'same-origin' }
+}));
+
 app.use(compression()); // Compress responses
-app.use(express.json());
+app.use(express.json({ limit: '100kb' })); // Limit payload size
 
 // Rate limiting
 const limiter = rateLimit({
@@ -108,8 +127,9 @@ app.get("/health", (req, res) => {
   res.status(200).json({ status: "UP" });
 });
 
-// Metrics endpoint for Prometheus
-app.get("/metrics", async (req, res) => {
+// Metrics endpoint for Prometheus with authentication
+const { verifyToken } = require("./middleware/auth");
+app.get("/metrics", verifyToken, async (req, res) => {
   res.set('Content-Type', register.contentType);
   res.end(await register.metrics());
 });
@@ -130,12 +150,17 @@ app.use(expressWinston.errorLogger({
   )
 }));
 
-// Global error handler
+// Global error handler with improved security
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  // Log error details for debugging but don't expose to client
+  console.error(`[${new Date().toISOString()}] Error: ${err.message}`);
+  console.error(`Stack: ${err.stack}`);
+  
+  // Send sanitized response to client
   res.status(500).json({
     error: "Internal Server Error",
-    message: process.env.NODE_ENV === 'production' ? 'Something went wrong' : err.message
+    requestId: require('crypto').randomUUID(), // Add request ID for tracking
+    message: 'Something went wrong'
   });
 });
 

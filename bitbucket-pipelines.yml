@@ -1,0 +1,133 @@
+image: atlassian/default-image:3
+
+definitions:
+  caches:
+    npm: ~/.npm
+  steps:
+    - step: &backend-test
+        name: Backend Test
+        caches:
+          - npm
+        script:
+          - cd backend
+          - npm ci
+          - npm run lint
+          - npm test
+        artifacts:
+          - backend/coverage/**
+
+    - step: &backend-security
+        name: Backend Security Scan
+        script:
+          - pipe: aquasecurity/trivy-pipe:1.0.0
+            variables:
+              SCAN_TYPE: 'fs'
+              SCAN_REF: './backend'
+              EXIT_CODE: '1'
+              SEVERITY: 'HIGH,CRITICAL'
+        allow_failure: true
+
+    - step: &backend-build
+        name: Backend Build
+        services:
+          - docker
+        script:
+          - cd backend
+          - export BACKEND_IMAGE=$BITBUCKET_REPO_SLUG/backend:${BITBUCKET_BRANCH//\//_}
+          - docker build -t $BACKEND_IMAGE .
+          - docker login -u $DOCKER_HUB_USER -p $DOCKER_HUB_PASSWORD
+          - docker push $BACKEND_IMAGE
+
+    - step: &frontend-test
+        name: Frontend Test
+        caches:
+          - npm
+        script:
+          - cd frontend
+          - npm ci
+          - npm run lint
+          - npm test
+        artifacts:
+          - frontend/coverage/**
+
+    - step: &frontend-security
+        name: Frontend Security Scan
+        script:
+          - pipe: aquasecurity/trivy-pipe:1.0.0
+            variables:
+              SCAN_TYPE: 'fs'
+              SCAN_REF: './frontend'
+              EXIT_CODE: '1'
+              SEVERITY: 'HIGH,CRITICAL'
+        allow_failure: true
+
+    - step: &frontend-build
+        name: Frontend Build
+        services:
+          - docker
+        script:
+          - cd frontend
+          - export FRONTEND_IMAGE=$BITBUCKET_REPO_SLUG/frontend:${BITBUCKET_BRANCH//\//_}
+          - docker build -t $FRONTEND_IMAGE .
+          - docker login -u $DOCKER_HUB_USER -p $DOCKER_HUB_PASSWORD
+          - docker push $FRONTEND_IMAGE
+
+    - step: &deploy-staging
+        name: Deploy to Staging
+        deployment: staging
+        script:
+          - pipe: atlassian/kubectl-run:2.0.0
+            variables:
+              KUBE_CONFIG: $KUBE_CONFIG_STAGING
+              KUBECTL_COMMAND: 'apply'
+              RESOURCE_PATH: 'k8s/namespace.yml'
+          - cd k8s
+          - export BACKEND_IMAGE=$BITBUCKET_REPO_SLUG/backend:${BITBUCKET_BRANCH//\//_}
+          - sed -i "s|image:.*|image: $BACKEND_IMAGE|g" backend-deployment.yml
+          - pipe: atlassian/kubectl-run:2.0.0
+            variables:
+              KUBE_CONFIG: $KUBE_CONFIG_STAGING
+              KUBECTL_COMMAND: 'apply'
+              RESOURCE_PATH: 'k8s/'
+
+    - step: &deploy-production
+        name: Deploy to Production
+        deployment: production
+        trigger: manual
+        script:
+          - pipe: atlassian/aws-cli-run:1.0.0
+            variables:
+              AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+              AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+              AWS_DEFAULT_REGION: $AWS_DEFAULT_REGION
+              COMMAND: 'eks update-kubeconfig --name production-cluster --region $AWS_DEFAULT_REGION'
+          - curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          - chmod +x argocd
+          - ./argocd login $ARGOCD_SERVER --username $ARGOCD_USERNAME --password $ARGOCD_PASSWORD --insecure
+          - ./argocd app sync devops-flow
+          - ./argocd app wait devops-flow
+
+pipelines:
+  branches:
+    main:
+      - step: *backend-test
+      - step: *backend-security
+      - step: *frontend-test
+      - step: *frontend-security
+      - step: *backend-build
+      - step: *frontend-build
+      - step: *deploy-production
+    staging:
+      - step: *backend-test
+      - step: *backend-security
+      - step: *frontend-test
+      - step: *frontend-security
+      - step: *backend-build
+      - step: *frontend-build
+      - step: *deploy-staging
+  pull-requests:
+    '**':
+      - step: *backend-test
+      - step: *backend-security
+      - step: *frontend-test
+      - step: *frontend-security
