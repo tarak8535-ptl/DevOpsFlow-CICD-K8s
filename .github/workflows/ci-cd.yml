@@ -160,7 +160,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build]
     if: github.ref == 'refs/heads/main'
-    environment: production
+    environment:
+      name: production
+      url: https://your-production-url.com
     steps:
       - name: Set up ArgoCD CLI
         run: |
@@ -174,7 +176,3 @@ jobs:
         run: |
           argocd app sync devops-flow
           argocd app wait devops-flow
-    # This job requires manual approval
-    environment:
-      name: production
-      url: https://your-production-url.com
