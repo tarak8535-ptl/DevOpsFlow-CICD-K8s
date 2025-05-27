@@ -1,5 +1,14 @@
 # DevOpsFlow-CICD-K8s Version History
 
+## v1.0.2 (2025-05-29)
+### Security
+- Added explicit GitHub Actions permissions following principle of least privilege
+- Set default permissions to read-only with specific write permissions only where needed
+
+## v1.0.1 (2025-05-28)
+### Security
+- Updated jsonwebtoken dependency from 8.5.1 to 9.0.0 to fix potential signature validation bypass vulnerability
+
 ## v1.0.0 (2025-05-25)
 ### Added
 - Multi-platform CI/CD support (GitHub Actions, Bitbucket Pipelines, Jenkins)
