@@ -1,47 +1,98 @@
 DevOpsFlow-CICD-K8s/
 ├── .github/
 │   └── workflows/
-│       └── ci-cd.yml
+│       └── ci-cd.yml                # GitHub Actions CI/CD pipeline
 ├── backend/
 │   ├── src/
 │   │   ├── middleware/
-│   │   │   └── auth.js
+│   │   │   └── auth.js              # JWT authentication middleware
 │   │   ├── routes/
-│   │   │   ├── auth.js
-│   │   │   ├── dashboard.js
-│   │   │   ├── logs.js
-│   │   │   └── monitoring.js
-│   │   └── server.js
-│   ├── Dockerfile
-│   └── package.json
+│   │   │   ├── auth.js              # Authentication endpoints
+│   │   │   ├── dashboard.js         # Dashboard API routes
+│   │   │   ├── logs.js              # Deployment logs API
+│   │   │   ├── monitoring.js        # Monitoring metrics API
+│   │   │   └── terraform.js         # Terraform generator API
+│   │   ├── services/
+│   │   │   └── terraformGenerator.js # Core Terraform code generation
+│   │   └── server.js                # Express server entry point
+│   ├── Dockerfile                   # Backend container definition
+│   ├── package-lock.json            # NPM lock file
+│   └── package.json                 # Backend dependencies
 ├── frontend/
 │   ├── nginx/
-│   │   └── nginx.conf
+│   │   └── nginx.conf               # Nginx configuration
 │   ├── public/
-│   │   └── index.html
+│   │   └── index.html               # HTML entry point
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── Dashboard.js
-│   │   │   ├── DeploymentLogs.js
-│   │   │   ├── Login.js
-│   │   │   └── Monitoring.js
-│   │   ├── App.js
-│   │   └── index.js
-│   ├── Dockerfile
-│   ├── Jenkinsfile
-│   └── package.json
+│   │   │   ├── Dashboard.js         # CloudTarkk main dashboard
+│   │   │   ├── DeploymentLogs.js    # Logs viewer component
+│   │   │   ├── Login.js             # Authentication component
+│   │   │   ├── Monitoring.js        # Monitoring dashboard
+│   │   │   ├── Navigation.js        # Navigation bar component
+│   │   │   └── TerraformGenerator.js # AWS Terraform generator wizard
+│   │   ├── utils/
+│   │   │   └── api.js               # Centralized API configuration
+│   │   ├── App.js                   # Main React application
+│   │   └── index.js                 # React entry point
+│   ├── Dockerfile                   # Frontend container definition
+│   ├── Jenkinsfile                  # Frontend-specific Jenkins pipeline
+│   ├── package-lock.json            # NPM lock file
+│   └── package.json                 # Frontend dependencies
 ├── helm/
 │   ├── templates/
-│   │   └── deployment.yaml
-│   ├── Chart.yml
-│   └── values.yml
+│   │   └── deployment.yaml          # Kubernetes deployment template
+│   ├── Chart.yml                    # Helm chart metadata
+│   └── values.yml                   # Helm configuration values
 ├── k8s/
-│   ├── backend-deployment.yml
-│   ├── deployment.yml
-│   ├── ingress.yml
-│   ├── namespace.yml
-│   └── service.yml
-├── .gitignore
-├── bitbucket-pipelines.yml
-├── Jenkinsfile
-└── README.md
+│   ├── backend-deployment.yml       # Backend Kubernetes deployment
+│   ├── deployment.yml               # Main application deployment
+│   ├── ingress.yml                  # Ingress controller configuration
+│   ├── namespace.yml                # Kubernetes namespace
+│   └── service.yml                  # Service definitions
+├── .gitignore                       # Git ignore patterns
+├── bitbucket-pipelines.yml          # Bitbucket CI/CD pipeline
+├── CLOUDTARKK_INFRAGEN.md           # CloudTarkk InfraGen product documentation
+├── flow-diagrams.md                 # Architecture and flow diagrams
+├── Jenkinsfile                      # Main Jenkins pipeline
+├── package-lock.json                # Root NPM lock file
+├── package.json                     # Root package configuration
+├── project-tree.txt                 # This file - project structure
+├── README.md                        # Main project documentation
+├── TERRAFORM_GENERATOR.md           # Terraform generator documentation
+├── test-backend.js                  # Backend connectivity tests
+├── test-services.js                 # Services endpoint tests
+└── VERSION.md                       # Version information
+
+## Key Components
+
+### Backend Services (Node.js/Express)
+- **Authentication**: JWT-based auth with rate limiting
+- **Terraform Generator**: 11 AWS services with templates
+- **API Routes**: RESTful endpoints for all features
+- **Middleware**: Security and validation layers
+
+### Frontend Application (React)
+- **CloudTarkk Branding**: Modern gradient design
+- **5-Step Wizard**: Provider → Services → Configure → Advanced → Generate
+- **Responsive UI**: Card-based layouts with professional styling
+- **API Integration**: Centralized configuration with error handling
+
+### Infrastructure
+- **Kubernetes**: Production-ready manifests with security contexts
+- **Helm Charts**: Environment templating and configuration
+- **CI/CD Pipelines**: GitHub Actions, Bitbucket, Jenkins support
+- **Containerization**: Multi-stage Docker builds
+
+### AWS Services Supported
+1. EC2 (Compute instances)
+2. RDS (Managed databases)
+3. S3 (Object storage)
+4. VPC (Virtual private cloud)
+5. Lambda (Serverless functions)
+6. IAM Role (Identity management)
+7. IAM Policy (Permission policies)
+8. IAM User (User accounts)
+9. IAM Group (User groups)
+10. CloudWatch (Monitoring)
+11. ELB (Load balancing)
