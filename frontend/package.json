@@ -1,8 +1,9 @@
 {
-  "name": "devops-flow",
+  "name": "cloudtarkk-infragen",
   "version": "1.0.0",
-  "description": "DevOps Flow React Frontend",
+  "description": "CloudTarkk InfraGen - Infrastructure as Code Platform",
   "main": "src/index.js",
+  "proxy": "http://localhost:5000",
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",

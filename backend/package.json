@@ -1,7 +1,7 @@
 {
-  "name": "devops-flow-backend",
+  "name": "cloudtarkk-infragen-backend",
   "version": "1.0.0",
-  "description": "Backend API for DevOps Flow",
+  "description": "CloudTarkk InfraGen Backend API",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
@@ -19,7 +19,10 @@
     "express-winston": "^4.2.0",
     "compression": "^1.7.4",
     "express-rate-limit": "^6.9.0",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "uuid": "^9.0.0",
+    "joi": "^17.9.2",
+    "axios": "^1.4.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.0",

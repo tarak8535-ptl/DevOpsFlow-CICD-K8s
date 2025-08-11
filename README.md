@@ -16,6 +16,12 @@ DevOpsFlow-CICD-K8s is a comprehensive full-stack application demonstrating mode
   - RESTful API backend services
   - React-based frontend with modern UI/UX
   - Istio service mesh integration
+- **AWS Terraform Generator**
+  - Visual AWS service selection (EC2, RDS, S3, VPC, Lambda, IAM, CloudWatch, ELB)
+  - Dynamic configuration forms with templates
+  - Automatic Terraform code generation
+  - Download generated .tf files
+  - Provider configuration management
 - **Kubernetes Deployment**
   - Production-grade manifests with security contexts
   - Helm charts for environment templating
@@ -65,7 +71,10 @@ DevOpsFlow-CICD-K8s/
 │   │   │   ├── auth.js              # Authentication routes
 │   │   │   ├── dashboard.js         # Dashboard API endpoints
 │   │   │   ├── logs.js              # Logging API endpoints
-│   │   │   └── monitoring.js        # Monitoring API endpoints
+│   │   │   ├── monitoring.js        # Monitoring API endpoints
+│   │   │   └── terraform.js         # Terraform generator API
+│   │   ├── services/
+│   │   │   └── terraformGenerator.js # Terraform code generation logic
 │   │   └── server.js                # Main server entry point
 │   ├── Dockerfile                   # Backend container definition
 │   └── package.json                 # Backend dependencies
@@ -79,7 +88,11 @@ DevOpsFlow-CICD-K8s/
 │   │   │   ├── Dashboard.js         # Dashboard component
 │   │   │   ├── DeploymentLogs.js    # Logs display component
 │   │   │   ├── Login.js             # Authentication component
-│   │   │   └── Monitoring.js        # Monitoring component
+│   │   │   ├── Monitoring.js        # Monitoring component
+│   │   │   ├── Navigation.js        # Navigation component
+│   │   │   └── TerraformGenerator.js # AWS Terraform generator
+│   │   ├── utils/
+│   │   │   └── api.js               # Centralized API configuration
 │   │   ├── App.js                   # Main React component
 │   │   └── index.js                 # React entry point
 │   ├── Dockerfile                   # Frontend container definition
@@ -96,10 +109,24 @@ DevOpsFlow-CICD-K8s/
 │   ├── namespace.yml                # Namespace definition
 │   └── service.yml                  # Service definition
 ├── .gitignore                       # Git ignore file
+├── ARCHITECTURE.md                  # System architecture documentation
 ├── bitbucket-pipelines.yml          # Bitbucket Pipelines configuration
+├── CLOUDTARKK_INFRAGEN.md           # CloudTarkk InfraGen product documentation
+├── flow-diagrams.md                 # Architecture and flow diagrams
 ├── Jenkinsfile                      # Jenkins pipeline definition
-└── README.md                        # Project documentation
+├── project-tree.txt                 # Project structure documentation
+├── README.md                        # Project documentation
+├── TERRAFORM_GENERATOR.md           # Terraform Generator documentation
+├── test-backend.js                  # Backend connectivity test script
+├── test-services.js                 # Services endpoint test script
+└── VERSION.md                       # Version information
 ```
+
+---
+
+## Architecture
+
+For detailed system architecture, component diagrams, and technical flow documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 

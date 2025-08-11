@@ -16,6 +16,7 @@ const authRoutes = require("./routes/auth");
 const dashboardRoutes = require("./routes/dashboard");
 const logsRoutes = require("./routes/logs");
 const monitoringRoutes = require("./routes/monitoring");
+const terraformRoutes = require("./routes/terraform");
 
 // Initialize Express app
 const app = express();
@@ -121,10 +122,29 @@ app.use("/api/auth", authRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/logs", logsRoutes);
 app.use("/api/monitoring", monitoringRoutes);
+app.use("/api/terraform", terraformRoutes);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "UP" });
+});
+
+// Debug endpoint to test services without auth
+app.get("/debug/services", (req, res) => {
+  const services = [
+    { id: 'ec2', name: 'EC2 Instance', category: 'Compute' },
+    { id: 'rds', name: 'RDS Database', category: 'Database' },
+    { id: 's3', name: 'S3 Bucket', category: 'Storage' },
+    { id: 'vpc', name: 'VPC Network', category: 'Networking' },
+    { id: 'lambda', name: 'Lambda Function', category: 'Compute' },
+    { id: 'iam_role', name: 'IAM Role', category: 'Security' },
+    { id: 'iam_policy', name: 'IAM Policy', category: 'Security' },
+    { id: 'iam_user', name: 'IAM User', category: 'Security' },
+    { id: 'iam_group', name: 'IAM Group', category: 'Security' },
+    { id: 'cloudwatch', name: 'CloudWatch', category: 'Monitoring' },
+    { id: 'elb', name: 'Load Balancer', category: 'Networking' }
+  ];
+  res.json({ services });
 });
 
 // Metrics endpoint for Prometheus with authentication
@@ -136,7 +156,7 @@ app.get("/metrics", verifyToken, async (req, res) => {
 
 // Root endpoint
 app.get("/", (req, res) => {
-  res.send("DevOps Flow Backend is Running!");
+  res.send("CloudTarkk InfraGen Backend is Running!");
 });
 
 // Error logging
