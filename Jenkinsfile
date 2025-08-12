@@ -2,11 +2,13 @@ pipeline {
     agent any
     
     environment {
-        DOCKER_REGISTRY = 'docker.io'
-        BACKEND_IMAGE = "${DOCKER_REGISTRY}/devopsflow/backend:${env.BRANCH_NAME.replaceAll('/', '_')}"
-        FRONTEND_IMAGE = "${DOCKER_REGISTRY}/devopsflow/frontend:${env.BRANCH_NAME.replaceAll('/', '_')}"
-        DOCKER_CREDENTIALS = credentials('docker-credentials')
-        ARGOCD_SERVER = credentials('argocd-server-url')
+        AWS_REGION = 'us-east-1'
+        PROJECT_NAME = 'cloudtarkk-infragen'
+        ECR_REGISTRY = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+        BACKEND_IMAGE = "${ECR_REGISTRY}/${PROJECT_NAME}/backend:${env.BUILD_NUMBER}"
+        FRONTEND_IMAGE = "${ECR_REGISTRY}/${PROJECT_NAME}/frontend:${env.BUILD_NUMBER}"
+        AWS_CREDENTIALS = credentials('aws-credentials')
+        TERRAFORM_DIR = 'terraform'
     }
     
     stages {
@@ -97,6 +99,28 @@ pipeline {
             }
         }
         
+        stage('Infrastructure') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'staging'
+                }
+            }
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                    dir('terraform') {
+                        sh 'terraform init'
+                        sh 'terraform plan -out=tfplan'
+                        sh 'terraform apply -auto-approve tfplan'
+                        script {
+                            env.AWS_ACCOUNT_ID = sh(script: 'aws sts get-caller-identity --query Account --output text', returnStdout: true).trim()
+                            env.EKS_CLUSTER_NAME = sh(script: 'terraform output -raw eks_cluster_id', returnStdout: true).trim()
+                        }
+                    }
+                }
+            }
+        }
+        
         stage('Build and Push Images') {
             when {
                 anyOf {
@@ -105,16 +129,18 @@ pipeline {
                 }
             }
             steps {
-                sh 'echo $DOCKER_CREDENTIALS_PSW | docker login $DOCKER_REGISTRY -u $DOCKER_CREDENTIALS_USR --password-stdin'
-                
-                dir('backend') {
-                    sh 'docker build -t $BACKEND_IMAGE .'
-                    sh 'docker push $BACKEND_IMAGE'
-                }
-                
-                dir('frontend') {
-                    sh 'docker build -t $FRONTEND_IMAGE .'
-                    sh 'docker push $FRONTEND_IMAGE'
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                    sh 'aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY'
+                    
+                    dir('backend') {
+                        sh 'docker build -t $BACKEND_IMAGE .'
+                        sh 'docker push $BACKEND_IMAGE'
+                    }
+                    
+                    dir('frontend') {
+                        sh 'docker build -t $FRONTEND_IMAGE .'
+                        sh 'docker push $FRONTEND_IMAGE'
+                    }
                 }
             }
         }
@@ -124,10 +150,14 @@ pipeline {
                 branch 'staging'
             }
             steps {
-                withKubeConfig([credentialsId: 'kube-staging']) {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                    sh 'aws eks update-kubeconfig --region $AWS_REGION --name $EKS_CLUSTER_NAME'
                     sh 'kubectl apply -f k8s/namespace.yml'
-                    sh "sed -i 's|image:.*|image: $BACKEND_IMAGE|g' k8s/backend-deployment.yml"
+                    sh "sed -i 's|image:.*backend.*|image: $BACKEND_IMAGE|g' k8s/backend-deployment.yml"
+                    sh "sed -i 's|image:.*frontend.*|image: $FRONTEND_IMAGE|g' k8s/deployment.yml"
                     sh 'kubectl apply -f k8s/'
+                    sh 'kubectl rollout status deployment/backend-deployment -n devops'
+                    sh 'kubectl rollout status deployment/frontend-deployment -n devops'
                 }
             }
         }
@@ -141,13 +171,14 @@ pipeline {
                 ok "Yes"
             }
             steps {
-                withCredentials([string(credentialsId: 'argocd-auth-token', variable: 'ARGOCD_AUTH_TOKEN')]) {
-                    sh '''
-                        curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-                        chmod +x argocd
-                        ./argocd app sync devops-flow --auth-token $ARGOCD_AUTH_TOKEN --server $ARGOCD_SERVER --insecure
-                        ./argocd app wait devops-flow --auth-token $ARGOCD_AUTH_TOKEN --server $ARGOCD_SERVER --insecure
-                    '''
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']]) {
+                    sh 'aws eks update-kubeconfig --region $AWS_REGION --name $EKS_CLUSTER_NAME'
+                    sh 'kubectl apply -f k8s/namespace.yml'
+                    sh "sed -i 's|image:.*backend.*|image: $BACKEND_IMAGE|g' k8s/backend-deployment.yml"
+                    sh "sed -i 's|image:.*frontend.*|image: $FRONTEND_IMAGE|g' k8s/deployment.yml"
+                    sh 'kubectl apply -f k8s/'
+                    sh 'kubectl rollout status deployment/backend-deployment -n devops'
+                    sh 'kubectl rollout status deployment/frontend-deployment -n devops'
                 }
             }
         }

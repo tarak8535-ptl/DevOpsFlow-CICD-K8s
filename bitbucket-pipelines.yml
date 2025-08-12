@@ -21,11 +21,27 @@ definitions:
         script:
           - pipe: aquasecurity/trivy-pipe:1.0.0
             variables:
-              SCAN_TYPE: 'fs'
-              SCAN_REF: './backend'
-              EXIT_CODE: '1'
-              SEVERITY: 'HIGH,CRITICAL'
+              SCAN_TYPE: "fs"
+              SCAN_REF: "./backend"
+              EXIT_CODE: "1"
+              SEVERITY: "HIGH,CRITICAL"
         allow_failure: true
+
+    - step: &terraform-deploy
+        name: Deploy AWS Infrastructure
+        script:
+          - pipe: atlassian/aws-cli-run:1.0.0
+            variables:
+              AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+              AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+              AWS_DEFAULT_REGION: $AWS_DEFAULT_REGION
+              COMMAND: "sts get-caller-identity"
+          - curl -fsSL https://releases.hashicorp.com/terraform/1.5.0/terraform_1.5.0_linux_amd64.zip -o terraform.zip
+          - unzip terraform.zip && chmod +x terraform
+          - cd terraform
+          - ./terraform init
+          - ./terraform plan -out=tfplan
+          - ./terraform apply -auto-approve tfplan
 
     - step: &backend-build
         name: Backend Build
@@ -33,9 +49,15 @@ definitions:
           - docker
         script:
           - cd backend
-          - export BACKEND_IMAGE=$BITBUCKET_REPO_SLUG/backend:${BITBUCKET_BRANCH//\//_}
+          - export ECR_REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+          - export BACKEND_IMAGE=$ECR_REGISTRY/cloudtarkk-infragen/backend:$BITBUCKET_BUILD_NUMBER
+          - pipe: atlassian/aws-cli-run:1.0.0
+            variables:
+              AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+              AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+              AWS_DEFAULT_REGION: $AWS_DEFAULT_REGION
+              COMMAND: "ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY"
           - docker build -t $BACKEND_IMAGE .
-          - docker login -u $DOCKER_HUB_USER -p $DOCKER_HUB_PASSWORD
           - docker push $BACKEND_IMAGE
 
     - step: &frontend-test
@@ -55,10 +77,10 @@ definitions:
         script:
           - pipe: aquasecurity/trivy-pipe:1.0.0
             variables:
-              SCAN_TYPE: 'fs'
-              SCAN_REF: './frontend'
-              EXIT_CODE: '1'
-              SEVERITY: 'HIGH,CRITICAL'
+              SCAN_TYPE: "fs"
+              SCAN_REF: "./frontend"
+              EXIT_CODE: "1"
+              SEVERITY: "HIGH,CRITICAL"
         allow_failure: true
 
     - step: &frontend-build
@@ -67,31 +89,38 @@ definitions:
           - docker
         script:
           - cd frontend
-          - export FRONTEND_IMAGE=$BITBUCKET_REPO_SLUG/frontend:${BITBUCKET_BRANCH//\//_}
+          - export ECR_REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+          - export FRONTEND_IMAGE=$ECR_REGISTRY/cloudtarkk-infragen/frontend:$BITBUCKET_BUILD_NUMBER
+          - pipe: atlassian/aws-cli-run:1.0.0
+            variables:
+              AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+              AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+              AWS_DEFAULT_REGION: $AWS_DEFAULT_REGION
+              COMMAND: "ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY"
           - docker build -t $FRONTEND_IMAGE .
-          - docker login -u $DOCKER_HUB_USER -p $DOCKER_HUB_PASSWORD
           - docker push $FRONTEND_IMAGE
 
     - step: &deploy-staging
-        name: Deploy to Staging
+        name: Deploy to EKS Staging
         deployment: staging
         script:
-          - pipe: atlassian/kubectl-run:2.0.0
+          - pipe: atlassian/aws-cli-run:1.0.0
             variables:
-              KUBE_CONFIG: $KUBE_CONFIG_STAGING
-              KUBECTL_COMMAND: 'apply'
-              RESOURCE_PATH: 'k8s/namespace.yml'
-          - cd k8s
-          - export BACKEND_IMAGE=$BITBUCKET_REPO_SLUG/backend:${BITBUCKET_BRANCH//\//_}
-          - sed -i "s|image:.*|image: $BACKEND_IMAGE|g" backend-deployment.yml
-          - pipe: atlassian/kubectl-run:2.0.0
-            variables:
-              KUBE_CONFIG: $KUBE_CONFIG_STAGING
-              KUBECTL_COMMAND: 'apply'
-              RESOURCE_PATH: 'k8s/'
+              AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
+              AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
+              AWS_DEFAULT_REGION: $AWS_DEFAULT_REGION
+              COMMAND: "eks update-kubeconfig --name cloudtarkk-infragen-cluster --region $AWS_DEFAULT_REGION"
+          - export ECR_REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+          - export BACKEND_IMAGE=$ECR_REGISTRY/cloudtarkk-infragen/backend:$BITBUCKET_BUILD_NUMBER
+          - export FRONTEND_IMAGE=$ECR_REGISTRY/cloudtarkk-infragen/frontend:$BITBUCKET_BUILD_NUMBER
+          - kubectl apply -f k8s/namespace.yml
+          - sed -i "s|image:.*backend.*|image: $BACKEND_IMAGE|g" k8s/backend-deployment.yml
+          - sed -i "s|image:.*frontend.*|image: $FRONTEND_IMAGE|g" k8s/deployment.yml
+          - kubectl apply -f k8s/
+          - kubectl rollout status deployment/backend-deployment -n devops
 
     - step: &deploy-production
-        name: Deploy to Production
+        name: Deploy to EKS Production
         deployment: production
         trigger: manual
         script:
@@ -100,12 +129,16 @@ definitions:
               AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
               AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
               AWS_DEFAULT_REGION: $AWS_DEFAULT_REGION
-              COMMAND: 'eks update-kubeconfig --name production-cluster --region $AWS_DEFAULT_REGION'
-          - curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-          - chmod +x argocd
-          - ./argocd login $ARGOCD_SERVER --username $ARGOCD_USERNAME --password $ARGOCD_PASSWORD --insecure
-          - ./argocd app sync devops-flow
-          - ./argocd app wait devops-flow
+              COMMAND: "eks update-kubeconfig --name cloudtarkk-infragen-cluster --region $AWS_DEFAULT_REGION"
+          - export ECR_REGISTRY=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+          - export BACKEND_IMAGE=$ECR_REGISTRY/cloudtarkk-infragen/backend:$BITBUCKET_BUILD_NUMBER
+          - export FRONTEND_IMAGE=$ECR_REGISTRY/cloudtarkk-infragen/frontend:$BITBUCKET_BUILD_NUMBER
+          - kubectl apply -f k8s/namespace.yml
+          - sed -i "s|image:.*backend.*|image: $BACKEND_IMAGE|g" k8s/backend-deployment.yml
+          - sed -i "s|image:.*frontend.*|image: $FRONTEND_IMAGE|g" k8s/deployment.yml
+          - kubectl apply -f k8s/
+          - kubectl rollout status deployment/backend-deployment -n devops
+          - kubectl rollout status deployment/frontend-deployment -n devops
 
 pipelines:
   branches:
@@ -116,6 +149,7 @@ pipelines:
       - parallel:
           - step: *backend-security
           - step: *frontend-security
+      - step: *terraform-deploy
       - parallel:
           - step: *backend-build
           - step: *frontend-build
@@ -127,12 +161,13 @@ pipelines:
       - parallel:
           - step: *backend-security
           - step: *frontend-security
+      - step: *terraform-deploy
       - parallel:
           - step: *backend-build
           - step: *frontend-build
       - step: *deploy-staging
   pull-requests:
-    '**':
+    "**":
       - parallel:
           - step: *backend-test
           - step: *frontend-test
