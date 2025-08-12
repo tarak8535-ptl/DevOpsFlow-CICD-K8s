@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: CloudTarkk InfraGen CI/CD
 
 on:
   push:
@@ -7,8 +7,11 @@ on:
     branches: [ main, staging ]
 
 env:
-  BACKEND_IMAGE: ${{ github.repository }}/backend:${{ github.ref_name }}
-  FRONTEND_IMAGE: ${{ github.repository }}/frontend:${{ github.ref_name }}
+  AWS_REGION: us-east-1
+  PROJECT_NAME: cloudtarkk-infragen
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+  BACKEND_IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/cloudtarkk-infragen/backend:${{ github.sha }}
+  FRONTEND_IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/cloudtarkk-infragen/frontend:${{ github.sha }}
 
 jobs:
   # Backend Jobs
@@ -93,39 +96,64 @@ jobs:
           format: 'table'
         continue-on-error: true
 
-  # Build Jobs
-  build:
+  # Infrastructure Jobs
+  infrastructure:
     runs-on: ubuntu-latest
     needs: [backend-test, backend-security, frontend-test, frontend-security]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
     steps:
       - uses: actions/checkout@v3
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.0
+      - name: Terraform Init
+        run: |
+          cd terraform
+          terraform init
+      - name: Terraform Plan
+        run: |
+          cd terraform
+          terraform plan -out=tfplan
+      - name: Terraform Apply
+        run: |
+          cd terraform
+          terraform apply -auto-approve tfplan
+
+  # Build Jobs
+  build:
+    runs-on: ubuntu-latest
+    needs: [infrastructure]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
+    steps:
+      - uses: actions/checkout@v3
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Build and push backend image
-        uses: docker/build-push-action@v4
-        with:
-          context: ./backend
-          push: true
-          tags: ghcr.io/${{ env.BACKEND_IMAGE }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        run: |
+          docker build -t ${{ env.BACKEND_IMAGE }} ./backend
+          docker push ${{ env.BACKEND_IMAGE }}
       
       - name: Build and push frontend image
-        uses: docker/build-push-action@v4
-        with:
-          context: ./frontend
-          push: true
-          tags: ghcr.io/${{ env.FRONTEND_IMAGE }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        run: |
+          docker build -t ${{ env.FRONTEND_IMAGE }} ./frontend
+          docker push ${{ env.FRONTEND_IMAGE }}
 
   # Deployment Jobs
   deploy-staging:
@@ -135,18 +163,22 @@ jobs:
     environment: staging
     steps:
       - uses: actions/checkout@v3
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
-      - name: Configure kubectl
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Update kubeconfig
         run: |
-          echo "${{ secrets.KUBE_CONFIG }}" > kubeconfig.yaml
-          export KUBECONFIG=./kubeconfig.yaml
-      - name: Deploy to Kubernetes
+          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.PROJECT_NAME }}-cluster
+      - name: Deploy to EKS
         run: |
-          cd k8s
-          kubectl apply -f namespace.yml
-          sed -i "s|image:.*|image: ghcr.io/${{ env.BACKEND_IMAGE }}|g" backend-deployment.yml
-          kubectl apply -f .
+          kubectl apply -f k8s/namespace.yml
+          sed -i "s|image:.*backend.*|image: ${{ env.BACKEND_IMAGE }}|g" k8s/backend-deployment.yml
+          sed -i "s|image:.*frontend.*|image: ${{ env.FRONTEND_IMAGE }}|g" k8s/deployment.yml
+          kubectl apply -f k8s/
+          kubectl rollout status deployment/backend-deployment -n devops
 
   deploy-production:
     runs-on: ubuntu-latest
@@ -154,19 +186,21 @@ jobs:
     if: github.ref == 'refs/heads/main'
     environment: production
     steps:
-      - name: Set up ArgoCD CLI
+      - uses: actions/checkout@v3
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Update kubeconfig
         run: |
-          curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-          sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
-          rm argocd-linux-amd64
-      - name: Login to ArgoCD
+          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.PROJECT_NAME }}-cluster
+      - name: Deploy to EKS
         run: |
-          argocd login ${{ secrets.ARGOCD_SERVER }} --username ${{ secrets.ARGOCD_USERNAME }} --password ${{ secrets.ARGOCD_PASSWORD }} --insecure
-      - name: Sync ArgoCD application
-        run: |
-          argocd app sync devops-flow
-          argocd app wait devops-flow
-    # This job requires manual approval
-    environment:
-      name: production
-      url: https://your-production-url.com
+          kubectl apply -f k8s/namespace.yml
+          sed -i "s|image:.*backend.*|image: ${{ env.BACKEND_IMAGE }}|g" k8s/backend-deployment.yml
+          sed -i "s|image:.*frontend.*|image: ${{ env.FRONTEND_IMAGE }}|g" k8s/deployment.yml
+          kubectl apply -f k8s/
+          kubectl rollout status deployment/backend-deployment -n devops
+          kubectl rollout status deployment/frontend-deployment -n devops
