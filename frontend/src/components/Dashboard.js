@@ -1,158 +1,103 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+
+const getToken = () => localStorage.getItem('token');
+const authHeader = () => ({ headers: { Authorization: `Bearer ${getToken()}` } });
+
+const pageStyle = {
+  maxWidth: '1000px',
+  margin: '0 auto',
+};
+
+const titleStyle = {
+  color: '#e0e0e0',
+  marginBottom: '24px',
+};
+
+const gridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+  gap: '20px',
+};
+
+const cardStyle = {
+  background: '#1a1a2e',
+  borderRadius: '8px',
+  padding: '24px',
+  boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+};
+
+const cardLabelStyle = {
+  color: '#888',
+  fontSize: '13px',
+  textTransform: 'uppercase',
+  marginBottom: '8px',
+};
+
+const cardValueStyle = {
+  color: '#e0e0e0',
+  fontSize: '28px',
+  fontWeight: 700,
+};
+
+const errorStyle = {
+  color: '#e53935',
+  textAlign: 'center',
+  marginTop: '40px',
+  fontSize: '16px',
+};
 
 function Dashboard() {
+  const [stats, setStats] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const response = await axios.get('/api/dashboard', authHeader());
+        setStats(response.data.stats);
+      } catch (err) {
+        if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+          localStorage.removeItem('token');
+          navigate('/');
+          return;
+        }
+        setError('Failed to load dashboard data.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [navigate]);
+
+  if (loading) return <p style={{ color: '#e0e0e0', textAlign: 'center', marginTop: '40px' }}>Loading...</p>;
+  if (error) return <p style={errorStyle}>{error}</p>;
+  if (!stats) return null;
+
   const cards = [
-    {
-      title: 'InfraGen Studio',
-      description: 'Generate multi-cloud infrastructure as code',
-      icon: '🏗️',
-      path: '/terraform',
-      gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      featured: true
-    },
-    {
-      title: 'Deployment Logs',
-      description: 'View application deployment logs and status',
-      icon: '📋',
-      path: '/logs',
-      gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'
-    },
-    {
-      title: 'Monitoring',
-      description: 'Monitor system metrics and performance',
-      icon: '📊',
-      path: '/monitoring',
-      gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'
-    }
+    { label: 'Total Deployments', value: stats.deployments },
+    { label: 'Active Services', value: stats.activeServices },
+    { label: 'Healthy Pods', value: stats.healthyPods },
+    { label: 'CPU Usage', value: stats.cpuUsage },
+    { label: 'Memory Usage', value: stats.memoryUsage },
+    { label: 'Last Deployment', value: stats.lastDeployment },
   ];
 
   return (
-    <div className="dashboard">
-      <div className="hero">
-        <h1>Welcome to CloudTarkk InfraGen</h1>
-        <p>Your complete Infrastructure as Code platform</p>
-      </div>
-      
-      <div className="cards-grid">
-        {cards.map((card, index) => (
-          <Link key={index} to={card.path} className="card-link">
-            <div className={`card ${card.featured ? 'featured' : ''}`} style={{ background: card.gradient }}>
-              <div className="card-icon">{card.icon}</div>
-              <h3>{card.title}</h3>
-              <p>{card.description}</p>
-              {card.featured && <div className="featured-badge">Featured</div>}
-            </div>
-          </Link>
+    <div style={pageStyle}>
+      <h2 style={titleStyle}>Dashboard</h2>
+      <div style={gridStyle}>
+        {cards.map((card) => (
+          <div key={card.label} style={cardStyle}>
+            <div style={cardLabelStyle}>{card.label}</div>
+            <div style={cardValueStyle}>{card.value ?? '--'}</div>
+          </div>
         ))}
       </div>
-
-      <style jsx>{`
-        .dashboard {
-          min-height: 100vh;
-          background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-          padding: 0;
-        }
-
-        .hero {
-          text-align: center;
-          padding: 60px 20px;
-          background: white;
-          margin-bottom: 40px;
-          box-shadow: 0 2px 20px rgba(0,0,0,0.1);
-        }
-
-        .hero h1 {
-          font-size: 3rem;
-          font-weight: 300;
-          color: #2c3e50;
-          margin: 0 0 20px 0;
-        }
-
-        .hero p {
-          font-size: 1.3rem;
-          color: #7f8c8d;
-          margin: 0;
-        }
-
-        .cards-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-          gap: 30px;
-          padding: 0 40px 60px;
-          max-width: 1200px;
-          margin: 0 auto;
-        }
-
-        .card-link {
-          text-decoration: none;
-          display: block;
-        }
-
-        .card {
-          padding: 40px 30px;
-          border-radius: 20px;
-          color: white;
-          text-align: center;
-          transition: all 0.3s ease;
-          box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-          position: relative;
-          overflow: hidden;
-        }
-
-        .card:hover {
-          transform: translateY(-10px);
-          box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-        }
-
-        .card.featured {
-          transform: scale(1.05);
-        }
-
-        .card-icon {
-          font-size: 4rem;
-          margin-bottom: 20px;
-        }
-
-        .card h3 {
-          font-size: 1.8rem;
-          font-weight: 600;
-          margin: 0 0 15px 0;
-        }
-
-        .card p {
-          font-size: 1.1rem;
-          opacity: 0.9;
-          margin: 0;
-          line-height: 1.5;
-        }
-
-        .featured-badge {
-          position: absolute;
-          top: 15px;
-          right: 15px;
-          background: rgba(255,255,255,0.2);
-          padding: 5px 12px;
-          border-radius: 20px;
-          font-size: 0.8rem;
-          font-weight: 600;
-        }
-
-        @media (max-width: 768px) {
-          .hero h1 {
-            font-size: 2rem;
-          }
-          
-          .cards-grid {
-            padding: 0 20px 40px;
-            gap: 20px;
-          }
-          
-          .card {
-            padding: 30px 20px;
-          }
-        }
-      `}</style>
     </div>
   );
 }

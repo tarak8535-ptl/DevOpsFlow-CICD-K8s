@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logs
+  namespace: devops
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: logs
+  template:
+    metadata:
+      labels:
+        app: logs
+    spec:
+      {{- include "devopsflow.podSecurityContext" . | nindent 6 }}
+      containers:
+        - name: logs
+          image: "{{ .Values.logs.image.repository }}:{{ .Values.logs.image.tag }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.logs.service.port }}
+          {{- include "devopsflow.containerSecurityContext" . | nindent 10 }}
+          {{- include "devopsflow.resources" . | nindent 10 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.logs.service.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.logs.service.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 5

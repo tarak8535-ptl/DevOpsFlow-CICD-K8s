@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: monitoring
+  namespace: devops
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: monitoring
+  template:
+    metadata:
+      labels:
+        app: monitoring
+    spec:
+      {{- include "devopsflow.podSecurityContext" . | nindent 6 }}
+      containers:
+        - name: monitoring
+          image: "{{ .Values.monitoring.image.repository }}:{{ .Values.monitoring.image.tag }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.monitoring.service.port }}
+          {{- include "devopsflow.containerSecurityContext" . | nindent 10 }}
+          {{- include "devopsflow.resources" . | nindent 10 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.monitoring.service.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.monitoring.service.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 5

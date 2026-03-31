@@ -1,4 +1,4 @@
-name: CloudTarkk InfraGen CI/CD
+name: CI/CD Pipeline
 
 on:
   push:
@@ -6,201 +6,273 @@ on:
   pull_request:
     branches: [ main, staging ]
 
+permissions:
+  contents: read
+
 env:
   AWS_REGION: us-east-1
-  PROJECT_NAME: cloudtarkk-infragen
-  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
-  BACKEND_IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/cloudtarkk-infragen/backend:${{ github.sha }}
-  FRONTEND_IMAGE: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/cloudtarkk-infragen/frontend:${{ github.sha }}
+  EKS_CLUSTER_NAME: devopsflow
+  ECR_AUTH_REPO: devopsflow/auth
+  ECR_DASHBOARD_REPO: devopsflow/dashboard
+  ECR_LOGS_REPO: devopsflow/logs
+  ECR_MONITORING_REPO: devopsflow/monitoring
+  ECR_FRONTEND_REPO: devopsflow/frontend
+  IMAGE_TAG: sha-${{ github.sha }}
 
 jobs:
-  # Backend Jobs
-  backend-test:
+  # ── Test (per-service, parallel) ─────────────────────────────────────
+
+  auth-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
-      - name: Install dependencies
-        run: |
-          cd backend
-          npm ci
-      - name: Run linting and tests
-        run: |
-          cd backend
-          npm run lint
-          npm test
-      - name: Upload test coverage
-        uses: actions/upload-artifact@v3
-        with:
-          name: backend-coverage
-          path: backend/coverage/
-          retention-days: 7
+          cache-dependency-path: services/auth/package-lock.json
+      - run: cd services/auth && npm ci
+      - run: cd services/auth && npm run lint && npm test
 
-  backend-security:
+  dashboard-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          scan-type: 'fs'
-          scan-ref: './backend'
-          exit-code: '1'
-          severity: 'HIGH,CRITICAL'
-          format: 'table'
-        continue-on-error: true
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: services/dashboard/package-lock.json
+      - run: cd services/dashboard && npm ci
+      - run: cd services/dashboard && npm run lint && npm test
 
-  # Frontend Jobs
+  logs-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: services/logs/package-lock.json
+      - run: cd services/logs && npm ci
+      - run: cd services/logs && npm run lint && npm test
+
+  monitoring-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: services/monitoring/package-lock.json
+      - run: cd services/monitoring && npm ci
+      - run: cd services/monitoring && npm run lint && npm test
+
   frontend-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
-      - name: Install dependencies
-        run: |
-          cd frontend
-          npm ci
-      - name: Run linting and tests
-        run: |
-          cd frontend
-          npm run lint
-          npm test
-      - name: Upload test coverage
-        uses: actions/upload-artifact@v3
-        with:
-          name: frontend-coverage
-          path: frontend/coverage/
-          retention-days: 7
+      - run: cd frontend && npm ci
+      - run: cd frontend && npm run lint && npm test
 
-  frontend-security:
+  # ── Security Scan (per-service, parallel) ────────────────────────────
+
+  security-scan:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [services/auth, services/dashboard, services/logs, services/monitoring, frontend]
     steps:
-      - uses: actions/checkout@v3
-      - name: Run Trivy vulnerability scanner
+      - uses: actions/checkout@v4
+      - name: Trivy scan ${{ matrix.service }}
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
-          scan-ref: './frontend'
+          scan-ref: './${{ matrix.service }}'
           exit-code: '1'
           severity: 'HIGH,CRITICAL'
           format: 'table'
         continue-on-error: true
 
-  # Infrastructure Jobs
-  infrastructure:
-    runs-on: ubuntu-latest
-    needs: [backend-test, backend-security, frontend-test, frontend-security]
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
-    steps:
-      - uses: actions/checkout@v3
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.5.0
-      - name: Terraform Init
-        run: |
-          cd terraform
-          terraform init
-      - name: Terraform Plan
-        run: |
-          cd terraform
-          terraform plan -out=tfplan
-      - name: Terraform Apply
-        run: |
-          cd terraform
-          terraform apply -auto-approve tfplan
+  # ── Build & Push to ECR ──────────────────────────────────────────────
 
-  # Build Jobs
   build:
     runs-on: ubuntu-latest
-    needs: [infrastructure]
+    needs: [auth-test, dashboard-test, logs-test, monitoring-test, frontend-test, security-scan]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@v3
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-      
-      - name: Build and push backend image
-        run: |
-          docker build -t ${{ env.BACKEND_IMAGE }} ./backend
-          docker push ${{ env.BACKEND_IMAGE }}
-      
-      - name: Build and push frontend image
-        run: |
-          docker build -t ${{ env.FRONTEND_IMAGE }} ./frontend
-          docker push ${{ env.FRONTEND_IMAGE }}
+      - uses: actions/checkout@v4
 
-  # Deployment Jobs
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push auth
+        uses: docker/build-push-action@v6
+        with:
+          context: ./services/auth
+          push: true
+          tags: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_AUTH_REPO }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=auth
+          cache-to: type=gha,mode=max,scope=auth
+
+      - name: Build and push dashboard
+        uses: docker/build-push-action@v6
+        with:
+          context: ./services/dashboard
+          push: true
+          tags: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_DASHBOARD_REPO }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=dashboard
+          cache-to: type=gha,mode=max,scope=dashboard
+
+      - name: Build and push logs
+        uses: docker/build-push-action@v6
+        with:
+          context: ./services/logs
+          push: true
+          tags: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_LOGS_REPO }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=logs
+          cache-to: type=gha,mode=max,scope=logs
+
+      - name: Build and push monitoring
+        uses: docker/build-push-action@v6
+        with:
+          context: ./services/monitoring
+          push: true
+          tags: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_MONITORING_REPO }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=monitoring
+          cache-to: type=gha,mode=max,scope=monitoring
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_FRONTEND_REPO }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+  # ── Deploy to Staging ────────────────────────────────────────────────
+
   deploy-staging:
     runs-on: ubuntu-latest
     needs: [build]
     if: github.ref == 'refs/heads/staging'
     environment: staging
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@v3
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+
       - name: Update kubeconfig
+        run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER_NAME }}
+
+      - name: Deploy to EKS via Helm
         run: |
-          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.PROJECT_NAME }}-cluster
-      - name: Deploy to EKS
+          REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+
+          helm dependency build ./helm
+
+          helm upgrade --install devopsflow ./helm \
+            --namespace devops --create-namespace \
+            --set auth.image.repository=${REGISTRY}/${{ env.ECR_AUTH_REPO }} \
+            --set auth.image.tag=${{ env.IMAGE_TAG }} \
+            --set dashboard.image.repository=${REGISTRY}/${{ env.ECR_DASHBOARD_REPO }} \
+            --set dashboard.image.tag=${{ env.IMAGE_TAG }} \
+            --set logs.image.repository=${REGISTRY}/${{ env.ECR_LOGS_REPO }} \
+            --set logs.image.tag=${{ env.IMAGE_TAG }} \
+            --set monitoring.image.repository=${REGISTRY}/${{ env.ECR_MONITORING_REPO }} \
+            --set monitoring.image.tag=${{ env.IMAGE_TAG }} \
+            --set frontend.image.repository=${REGISTRY}/${{ env.ECR_FRONTEND_REPO }} \
+            --set frontend.image.tag=${{ env.IMAGE_TAG }} \
+            --set frontend.service.type=NodePort \
+            --set imagePullPolicy=Always \
+            --wait --timeout 300s
+
+      - name: Wait for rollout
         run: |
-          kubectl apply -f k8s/namespace.yml
-          sed -i "s|image:.*backend.*|image: ${{ env.BACKEND_IMAGE }}|g" k8s/backend-deployment.yml
-          sed -i "s|image:.*frontend.*|image: ${{ env.FRONTEND_IMAGE }}|g" k8s/deployment.yml
-          kubectl apply -f k8s/
-          kubectl rollout status deployment/backend-deployment -n devops
+          kubectl rollout status deployment/auth -n devops --timeout=120s
+          kubectl rollout status deployment/dashboard -n devops --timeout=120s
+          kubectl rollout status deployment/logs -n devops --timeout=120s
+          kubectl rollout status deployment/monitoring -n devops --timeout=120s
+          kubectl rollout status deployment/devops-flow-frontend -n devops --timeout=120s
+
+  # ── Deploy to Production ─────────────────────────────────────────────
 
   deploy-production:
     runs-on: ubuntu-latest
     needs: [build]
     if: github.ref == 'refs/heads/main'
-    environment: production
+    environment:
+      name: production
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@v3
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+
       - name: Update kubeconfig
+        run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER_NAME }}
+
+      - name: Deploy to EKS via Helm
         run: |
-          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.PROJECT_NAME }}-cluster
-      - name: Deploy to EKS
+          REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+
+          helm dependency build ./helm
+
+          helm upgrade --install devopsflow ./helm \
+            --namespace devops --create-namespace \
+            -f helm/values-production.yaml \
+            --set auth.image.repository=${REGISTRY}/${{ env.ECR_AUTH_REPO }} \
+            --set auth.image.tag=${{ env.IMAGE_TAG }} \
+            --set dashboard.image.repository=${REGISTRY}/${{ env.ECR_DASHBOARD_REPO }} \
+            --set dashboard.image.tag=${{ env.IMAGE_TAG }} \
+            --set logs.image.repository=${REGISTRY}/${{ env.ECR_LOGS_REPO }} \
+            --set logs.image.tag=${{ env.IMAGE_TAG }} \
+            --set monitoring.image.repository=${REGISTRY}/${{ env.ECR_MONITORING_REPO }} \
+            --set monitoring.image.tag=${{ env.IMAGE_TAG }} \
+            --set frontend.image.repository=${REGISTRY}/${{ env.ECR_FRONTEND_REPO }} \
+            --set frontend.image.tag=${{ env.IMAGE_TAG }} \
+            --set replicaCount=2 \
+            --set imagePullPolicy=Always \
+            --wait --timeout 300s
+
+      - name: Wait for rollout
         run: |
-          kubectl apply -f k8s/namespace.yml
-          sed -i "s|image:.*backend.*|image: ${{ env.BACKEND_IMAGE }}|g" k8s/backend-deployment.yml
-          sed -i "s|image:.*frontend.*|image: ${{ env.FRONTEND_IMAGE }}|g" k8s/deployment.yml
-          kubectl apply -f k8s/
-          kubectl rollout status deployment/backend-deployment -n devops
-          kubectl rollout status deployment/frontend-deployment -n devops
+          kubectl rollout status deployment/auth -n devops --timeout=180s
+          kubectl rollout status deployment/dashboard -n devops --timeout=180s
+          kubectl rollout status deployment/logs -n devops --timeout=180s
+          kubectl rollout status deployment/monitoring -n devops --timeout=180s
+          kubectl rollout status deployment/devops-flow-frontend -n devops --timeout=180s

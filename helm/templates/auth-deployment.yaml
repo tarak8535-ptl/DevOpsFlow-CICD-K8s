@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth
+  namespace: devops
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: auth
+  template:
+    metadata:
+      labels:
+        app: auth
+    spec:
+      {{- include "devopsflow.podSecurityContext" . | nindent 6 }}
+      containers:
+        - name: auth
+          image: "{{ .Values.auth.image.repository }}:{{ .Values.auth.image.tag }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.auth.service.port }}
+          {{- include "devopsflow.containerSecurityContext" . | nindent 10 }}
+          {{- include "devopsflow.resources" . | nindent 10 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.auth.service.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.auth.service.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 5

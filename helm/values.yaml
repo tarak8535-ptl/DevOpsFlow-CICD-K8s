@@ -1,0 +1,58 @@
+replicaCount: 1
+
+imagePullPolicy: IfNotPresent
+
+frontend:
+  image:
+    repository: devopsflow-frontend
+    tag: latest
+  service:
+    type: NodePort
+    port: 80
+    nodePort: 30080
+
+auth:
+  image:
+    repository: devopsflow-auth
+    tag: latest
+  service:
+    port: 5001
+
+dashboard:
+  image:
+    repository: devopsflow-dashboard
+    tag: latest
+  service:
+    port: 5002
+
+logs:
+  image:
+    repository: devopsflow-logs
+    tag: latest
+  service:
+    port: 5003
+
+monitoring:
+  image:
+    repository: devopsflow-monitoring
+    tag: latest
+  service:
+    port: 5004
+
+ingress:
+  enabled: false
+  host: devops-flow.local
+
+# Prometheus + Grafana (kube-prometheus-stack)
+prometheus:
+  enabled: true
+
+kube-prometheus-stack:
+  grafana:
+    adminPassword: devopsflow
+    service:
+      type: NodePort
+      nodePort: 30300
+  prometheus:
+    prometheusSpec:
+      serviceMonitorSelectorNilUsesHelmValues: false

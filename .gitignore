@@ -1,6 +1,6 @@
 # Node.js dependencies
 node_modules/
-package-lock.json
+# package-lock.json  # Keep lock files — required by npm ci in Dockerfiles
 
 # Logs
 npm-debug.log*
@@ -24,13 +24,20 @@ yarn-error.log*
 # Helm
 charts/
 helm-release.yaml
-values.yaml
+# values.yaml  # Keep — needed by Helm chart
 *.tgz
 
 # Docker
 docker-compose.override.yml
 .env
 .dockerignore
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/*.tfplan
+terraform/.terraform.lock.hcl
 
 # CI/CD
 
@@ -40,3 +47,4 @@ docker-compose.override.yml
 *.seed
 *.sqlite
 Thumbs.db
+.DS_Store

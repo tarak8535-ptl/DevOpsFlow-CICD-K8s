@@ -1,54 +1,29 @@
-output "vpc_id" {
-  description = "ID of the VPC"
-  value       = aws_vpc.main.id
+output "cluster_name" {
+  description = "EKS cluster name"
+  value       = module.eks.cluster_name
 }
 
-output "public_subnet_ids" {
-  description = "IDs of the public subnets"
-  value       = aws_subnet.public[*].id
+output "cluster_endpoint" {
+  description = "EKS cluster API endpoint"
+  value       = module.eks.cluster_endpoint
 }
 
-output "private_subnet_ids" {
-  description = "IDs of the private subnets"
-  value       = aws_subnet.private[*].id
+output "ecr_urls" {
+  description = "ECR repository URLs for all services"
+  value       = { for name, repo in aws_ecr_repository.services : name => repo.repository_url }
 }
 
-output "eks_cluster_id" {
-  description = "EKS cluster ID"
-  value       = aws_eks_cluster.main.id
-}
-
-output "eks_cluster_arn" {
-  description = "EKS cluster ARN"
-  value       = aws_eks_cluster.main.arn
-}
-
-output "eks_cluster_endpoint" {
-  description = "Endpoint for EKS control plane"
-  value       = aws_eks_cluster.main.endpoint
-}
-
-output "eks_cluster_security_group_id" {
-  description = "Security group ids attached to the cluster control plane"
-  value       = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
-}
-
-output "eks_cluster_certificate_authority_data" {
-  description = "Base64 encoded certificate data required to communicate with the cluster"
-  value       = aws_eks_cluster.main.certificate_authority[0].data
-}
-
-output "backend_ecr_repository_url" {
-  description = "URL of the backend ECR repository"
-  value       = aws_ecr_repository.backend.repository_url
-}
-
-output "frontend_ecr_repository_url" {
-  description = "URL of the frontend ECR repository"
-  value       = aws_ecr_repository.frontend.repository_url
+output "github_actions_role_arn" {
+  description = "IAM role ARN for GitHub Actions — set as AWS_ROLE_ARN variable in GitHub repo settings"
+  value       = aws_iam_role.github_actions.arn
 }
 
 output "kubeconfig_command" {
-  description = "Command to configure kubectl"
-  value       = "aws eks update-kubeconfig --region ${var.aws_region} --name ${aws_eks_cluster.main.name}"
+  description = "Command to configure kubectl locally"
+  value       = "aws eks update-kubeconfig --region ${var.aws_region} --name ${module.eks.cluster_name}"
+}
+
+output "aws_account_id" {
+  description = "AWS account ID"
+  value       = data.aws_caller_identity.current.account_id
 }
