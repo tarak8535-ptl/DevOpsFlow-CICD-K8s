@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/tarak8535-ptl/DevOpsFlow-CICD-K8s.git
-    targetRevision: HEAD
+    targetRevision: v1.1.0-security-fix
     path: helm
     helm:
       valueFiles:

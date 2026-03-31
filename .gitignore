@@ -24,7 +24,7 @@ yarn-error.log*
 # Helm
 charts/
 helm-release.yaml
-values.yaml
+# values.yaml  # Keep — needed by Helm chart
 *.tgz
 
 # Docker
