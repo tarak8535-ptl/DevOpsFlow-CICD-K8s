@@ -22,7 +22,7 @@ End-to-end DevOps engineering covering every layer a production system needs:
 
 | Layer | What's built |
 |---|---|
-| **App** | Node.js REST API + React SPA, containerized with multi-stage Docker builds |
+| **App** | 4 Node.js microservices (Auth, Dashboard, Logs, Monitoring) + React SPA with nginx API gateway |
 | **Cloud** | AWS EKS cluster, ECR container registry, VPC networking &mdash; all provisioned via Terraform |
 | **CI/CD** | GitHub Actions with OIDC keyless auth to AWS (+ Bitbucket Pipelines, Jenkins implementations) |
 | **Kubernetes** | Namespace-isolated deployments, Ingress, Services, resource limits, health probes |
@@ -44,70 +44,19 @@ Suggested: Grafana dashboard, GitHub Actions pipeline run, ArgoCD sync view.
 
 ## Architecture — Live Flow
 
-> Every step below runs automatically on `git push`. No static AWS credentials are stored anywhere.
+> Every step runs automatically on `git push`. No static AWS credentials stored anywhere.
+> Open the [SVG version](diagrams/architecture.svg) for **animated flow lines**.
 
-```mermaid
-flowchart TD
-    DEV["Developer"] -->|git push to main/staging| GH["GitHub Repository"]
-
-    GH --> PIPE
-
-    subgraph PIPE ["CI/CD — GitHub Actions"]
-        direction TB
-        T["Backend Tests + Lint<br/>Frontend Tests + Lint<br/>(parallel jobs)"]
-        S["Trivy Security Scan<br/>(backend + frontend)"]
-        B["Docker Build<br/>(multi-stage)"]
-        T --> S --> B
-    end
-
-    subgraph OIDC ["Keyless Auth — GitHub OIDC"]
-        direction LR
-        JWT["GitHub issues<br/>OIDC JWT token"] --> STS["AWS STS validates token<br/>AssumeRoleWithWebIdentity"]
-        STS --> CREDS["Temporary credentials<br/>scoped to this repo only"]
-    end
-
-    B --> JWT
-
-    CREDS --> PUSH
-    CREDS --> DEPLOY
-
-    subgraph AWS ["AWS us-east-1 — Provisioned by Terraform"]
-
-        PUSH["Push images to ECR"]
-        PUSH --> ECR["ECR<br/>devopsflow/backend<br/>devopsflow/frontend"]
-
-        subgraph VPC ["VPC — 2 AZs, private subnets"]
-            subgraph EKS ["EKS Cluster"]
-                direction LR
-                DEPLOY["kubectl apply<br/>k8s/ manifests"] --> NS["devops namespace"]
-                NS --> FE["Frontend Pods<br/>React + Nginx"]
-                NS --> BE["Backend Pods<br/>Node.js + Express"]
-                FE <-->|REST API| BE
-            end
-        end
-
-        ECR -.->|image pull| EKS
-    end
-
-    LB["AWS Load Balancer<br/>auto-provisioned"] --> FE
-    USER["Users"] -->|HTTPS| LB
-
-    style OIDC fill:#e8f5e9,stroke:#2e7d32,color:#000
-    style AWS fill:#fff3e0,stroke:#e65100,color:#000
-    style PIPE fill:#e3f2fd,stroke:#1565c0,color:#000
-```
-
-**What happens on every push:**
+![Architecture Diagram](diagrams/architecture.png)
 
 | Step | What | How |
 |---|---|---|
-| 1 | Tests + lint run | Parallel jobs for backend and frontend |
-| 2 | Security scan | Trivy checks for HIGH/CRITICAL CVEs |
-| 3 | Docker build | Multi-stage build, cached via GitHub Actions cache |
-| 4 | OIDC auth | GitHub issues a JWT, AWS validates it — zero secrets |
-| 5 | Push images | Tagged with `sha-<commit>` to ECR |
-| 6 | Deploy | `kubectl apply` to EKS via temporary OIDC credentials |
-| 7 | Rollout wait | Pipeline blocks until pods are healthy |
+| 1 | git push | Triggers GitHub Actions workflow |
+| 2 | Test & Scan | Parallel lint/test + Trivy CVE scan |
+| 3 | OIDC Auth | GitHub issues JWT, AWS STS validates — zero secrets |
+| 4 | Push images | Tagged `sha-<commit>` to ECR |
+| 5 | Deploy | `kubectl apply` to EKS via temporary credentials |
+| 6 | Live | Users reach the app through AWS Load Balancer |
 
 ---
 
@@ -134,22 +83,31 @@ DevOpsFlow-CICD-K8s/
 │   └── package.json
 ├── frontend/
 │   ├── src/components/        # Dashboard, Login, Monitoring, Logs
-│   ├── nginx/nginx.conf       # Reverse proxy config
+│   ├── nginx/nginx.conf       # API gateway (routes to microservices)
 │   ├── Dockerfile             # Multi-stage build
 │   └── package.json
+├── services/
+│   ├── auth/                  # Auth microservice (:5001)
+│   ├── dashboard/             # Dashboard microservice (:5002)
+│   ├── logs/                  # Logs microservice (:5003)
+│   └── monitoring/            # Monitoring microservice (:5004)
 ├── helm/
 │   ├── templates/deployment.yaml
 │   ├── Chart.yml
-│   └── values.yml             # Parameterized for multi-env
+│   └── values.yml
 ├── k8s/
 │   ├── namespace.yml
-│   ├── deployment.yml         # Security contexts, resource limits
-│   ├── backend-deployment.yml
-│   ├── service.yml
-│   └── ingress.yml            # AWS ALB annotations (commented)
+│   ├── deployment.yml         # Frontend deployment
+│   ├── auth-deployment.yml    # Auth service deployment
+│   ├── dashboard-deployment.yml
+│   ├── logs-deployment.yml
+│   ├── monitoring-deployment.yml
+│   ├── *-service.yml          # ClusterIP services per microservice
+│   ├── frontend-service.yml   # LoadBalancer for frontend
+│   └── ingress.yml
 ├── bitbucket-pipelines.yml    # Bitbucket CI/CD
 ├── Jenkinsfile                # Jenkins declarative pipeline
-└── flow-diagrams.md           # Extended architecture diagrams
+└── diagrams/                  # Architecture diagram (Python + PNG)
 ```
 
 ---
@@ -166,7 +124,7 @@ Code Push → Test (parallel) → Security Scan → Build & Push → Deploy Stag
 
 | Stage | What happens |
 |---|---|
-| **Test** | Unit tests + linting for backend and frontend (runs in parallel) |
+| **Test** | Unit tests + linting per microservice + frontend (all parallel) |
 | **Security Scan** | Trivy filesystem scan for CVEs |
 | **Build** | Docker multi-stage build, push to container registry |
 | **Deploy Staging** | OIDC auth → `aws eks update-kubeconfig` → `kubectl apply` on staging branch |
@@ -195,57 +153,60 @@ Code Push → Test (parallel) → Security Scan → Build & Push → Deploy Stag
 - Node.js 18.x+
 - AWS CLI v2 + Terraform >= 1.5 (for AWS deployment)
 
-### Local Development
+### Option 1: Docker Compose (quickest)
 
 ```bash
-# Backend
-cd backend && npm install && npm start
-
-# Frontend (separate terminal)
-cd frontend && npm install && npm start
+docker compose up --build
+# App: http://localhost:80
 ```
 
-### Docker
+### Option 2: Local K8s + Helm + ArgoCD (full stack)
+
+Runs a kind cluster with all 5 microservices deployed via Helm, plus ArgoCD for GitOps.
 
 ```bash
-# Backend
-docker build -t backend:latest  ./backend
-docker run -p 5000:5000 backend:latest
+# Prerequisites: docker, kind, kubectl, helm
+brew install kind helm   # if not installed
 
-# Frontend
-docker build -t frontend:latest ./frontend
-docker run -p 80:80 frontend:latest
+# One command to set up everything
+./scripts/local-setup.sh
 ```
 
-### Kubernetes
+This script:
+1. Creates a kind cluster with port mappings
+2. Builds all 5 Docker images locally
+3. Loads images into the kind cluster
+4. Deploys microservices via Helm chart
+5. Installs ArgoCD with automated sync
+
+**Access:**
+| Service | URL |
+|---|---|
+| App | http://localhost:30080 |
+| ArgoCD UI | https://localhost:8080 (after port-forward) |
 
 ```bash
-# Deploy
-kubectl apply -f k8s/namespace.yml
-kubectl apply -f k8s/
+# Open ArgoCD UI
+kubectl port-forward svc/argocd-server -n argocd 8080:443
 
-# Verify
+# Check pods
 kubectl get pods -n devops
-kubectl get svc   -n devops
-```
 
-### Helm
-
-```bash
-helm install devops-flow ./helm --namespace devops
+# Teardown
+./scripts/local-teardown.sh
 ```
 
 ### Test the API
 
 ```bash
-# Get a token
-curl -X POST http://localhost:5000/api/auth/login \
+# Login
+curl -X POST http://localhost:30080/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"password"}'
 
 # Hit a protected route
-curl http://localhost:5000/api/dashboard \
-  -H "Authorization: Bearer <token>"
+curl http://localhost:30080/api/dashboard \
+  -H "Authorization: Bearer fake-jwt-token"
 ```
 
 ---

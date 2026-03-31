@@ -12,84 +12,90 @@ permissions:
 env:
   AWS_REGION: us-east-1
   EKS_CLUSTER_NAME: devopsflow
-  ECR_BACKEND_REPO: devopsflow/backend
+  ECR_AUTH_REPO: devopsflow/auth
+  ECR_DASHBOARD_REPO: devopsflow/dashboard
+  ECR_LOGS_REPO: devopsflow/logs
+  ECR_MONITORING_REPO: devopsflow/monitoring
   ECR_FRONTEND_REPO: devopsflow/frontend
   IMAGE_TAG: sha-${{ github.sha }}
 
 jobs:
-  # ── Test & Security (unchanged) ──────────────────────────────────────
+  # ── Test (per-service, parallel) ─────────────────────────────────────
 
-  backend-test:
+  auth-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
-      - name: Install dependencies
-        run: cd backend && npm ci
-      - name: Run linting and tests
-        run: |
-          cd backend
-          npm run lint
-          npm test
-      - name: Upload test coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-coverage
-          path: backend/coverage/
-          retention-days: 7
+          cache-dependency-path: services/auth/package-lock.json
+      - run: cd services/auth && npm ci
+      - run: cd services/auth && npm run lint && npm test
 
-  backend-security:
+  dashboard-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+      - uses: actions/setup-node@v4
         with:
-          scan-type: 'fs'
-          scan-ref: './backend'
-          exit-code: '1'
-          severity: 'HIGH,CRITICAL'
-          format: 'table'
-        continue-on-error: true
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: services/dashboard/package-lock.json
+      - run: cd services/dashboard && npm ci
+      - run: cd services/dashboard && npm run lint && npm test
+
+  logs-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: services/logs/package-lock.json
+      - run: cd services/logs && npm ci
+      - run: cd services/logs && npm run lint && npm test
+
+  monitoring-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: services/monitoring/package-lock.json
+      - run: cd services/monitoring && npm ci
+      - run: cd services/monitoring && npm run lint && npm test
 
   frontend-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
-      - name: Install dependencies
-        run: cd frontend && npm ci
-      - name: Run linting and tests
-        run: |
-          cd frontend
-          npm run lint
-          npm test
-      - name: Upload test coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-coverage
-          path: frontend/coverage/
-          retention-days: 7
+      - run: cd frontend && npm ci
+      - run: cd frontend && npm run lint && npm test
 
-  frontend-security:
+  # ── Security Scan (per-service, parallel) ────────────────────────────
+
+  security-scan:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [services/auth, services/dashboard, services/logs, services/monitoring, frontend]
     steps:
       - uses: actions/checkout@v4
-      - name: Run Trivy vulnerability scanner
+      - name: Trivy scan ${{ matrix.service }}
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
-          scan-ref: './frontend'
+          scan-ref: './${{ matrix.service }}'
           exit-code: '1'
           severity: 'HIGH,CRITICAL'
           format: 'table'
@@ -99,11 +105,11 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    needs: [backend-test, backend-security, frontend-test, frontend-security]
+    needs: [auth-test, dashboard-test, logs-test, monitoring-test, frontend-test, security-scan]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
     permissions:
       contents: read
-      id-token: write # Required for GitHub OIDC
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -120,23 +126,50 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push backend image
+      - name: Build and push auth
         uses: docker/build-push-action@v6
         with:
-          context: ./backend
+          context: ./services/auth
           push: true
-          tags: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_BACKEND_REPO }}:${{ env.IMAGE_TAG }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_AUTH_REPO }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=auth
+          cache-to: type=gha,mode=max,scope=auth
 
-      - name: Build and push frontend image
+      - name: Build and push dashboard
+        uses: docker/build-push-action@v6
+        with:
+          context: ./services/dashboard
+          push: true
+          tags: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_DASHBOARD_REPO }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=dashboard
+          cache-to: type=gha,mode=max,scope=dashboard
+
+      - name: Build and push logs
+        uses: docker/build-push-action@v6
+        with:
+          context: ./services/logs
+          push: true
+          tags: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_LOGS_REPO }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=logs
+          cache-to: type=gha,mode=max,scope=logs
+
+      - name: Build and push monitoring
+        uses: docker/build-push-action@v6
+        with:
+          context: ./services/monitoring
+          push: true
+          tags: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_MONITORING_REPO }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=monitoring
+          cache-to: type=gha,mode=max,scope=monitoring
+
+      - name: Build and push frontend
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
           push: true
           tags: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_FRONTEND_REPO }}:${{ env.IMAGE_TAG }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
 
   # ── Deploy to Staging ────────────────────────────────────────────────
 
@@ -165,13 +198,22 @@ jobs:
           REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
 
           kubectl apply -f k8s/namespace.yml
-          sed -i "s|image: .*devops-flow-backend.*|image: ${REGISTRY}/${{ env.ECR_BACKEND_REPO }}:${{ env.IMAGE_TAG }}|" k8s/backend-deployment.yml
-          sed -i "s|image: .*devops-flow-frontend.*|image: ${REGISTRY}/${{ env.ECR_FRONTEND_REPO }}:${{ env.IMAGE_TAG }}|" k8s/deployment.yml
+
+          # Substitute images for all microservices
+          sed -i "s|image: .*devopsflow-auth.*|image: ${REGISTRY}/${{ env.ECR_AUTH_REPO }}:${{ env.IMAGE_TAG }}|" k8s/auth-deployment.yml
+          sed -i "s|image: .*devopsflow-dashboard.*|image: ${REGISTRY}/${{ env.ECR_DASHBOARD_REPO }}:${{ env.IMAGE_TAG }}|" k8s/dashboard-deployment.yml
+          sed -i "s|image: .*devopsflow-logs.*|image: ${REGISTRY}/${{ env.ECR_LOGS_REPO }}:${{ env.IMAGE_TAG }}|" k8s/logs-deployment.yml
+          sed -i "s|image: .*devopsflow-monitoring.*|image: ${REGISTRY}/${{ env.ECR_MONITORING_REPO }}:${{ env.IMAGE_TAG }}|" k8s/monitoring-deployment.yml
+          sed -i "s|image: .*devopsflow-frontend.*|image: ${REGISTRY}/${{ env.ECR_FRONTEND_REPO }}:${{ env.IMAGE_TAG }}|" k8s/deployment.yml
+
           kubectl apply -f k8s/
 
       - name: Wait for rollout
         run: |
-          kubectl rollout status deployment/backend -n devops --timeout=120s
+          kubectl rollout status deployment/auth -n devops --timeout=120s
+          kubectl rollout status deployment/dashboard -n devops --timeout=120s
+          kubectl rollout status deployment/logs -n devops --timeout=120s
+          kubectl rollout status deployment/monitoring -n devops --timeout=120s
           kubectl rollout status deployment/devops-flow-frontend -n devops --timeout=120s
 
   # ── Deploy to Production ─────────────────────────────────────────────
@@ -202,11 +244,19 @@ jobs:
           REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
 
           kubectl apply -f k8s/namespace.yml
-          sed -i "s|image: .*devops-flow-backend.*|image: ${REGISTRY}/${{ env.ECR_BACKEND_REPO }}:${{ env.IMAGE_TAG }}|" k8s/backend-deployment.yml
-          sed -i "s|image: .*devops-flow-frontend.*|image: ${REGISTRY}/${{ env.ECR_FRONTEND_REPO }}:${{ env.IMAGE_TAG }}|" k8s/deployment.yml
+
+          sed -i "s|image: .*devopsflow-auth.*|image: ${REGISTRY}/${{ env.ECR_AUTH_REPO }}:${{ env.IMAGE_TAG }}|" k8s/auth-deployment.yml
+          sed -i "s|image: .*devopsflow-dashboard.*|image: ${REGISTRY}/${{ env.ECR_DASHBOARD_REPO }}:${{ env.IMAGE_TAG }}|" k8s/dashboard-deployment.yml
+          sed -i "s|image: .*devopsflow-logs.*|image: ${REGISTRY}/${{ env.ECR_LOGS_REPO }}:${{ env.IMAGE_TAG }}|" k8s/logs-deployment.yml
+          sed -i "s|image: .*devopsflow-monitoring.*|image: ${REGISTRY}/${{ env.ECR_MONITORING_REPO }}:${{ env.IMAGE_TAG }}|" k8s/monitoring-deployment.yml
+          sed -i "s|image: .*devopsflow-frontend.*|image: ${REGISTRY}/${{ env.ECR_FRONTEND_REPO }}:${{ env.IMAGE_TAG }}|" k8s/deployment.yml
+
           kubectl apply -f k8s/
 
       - name: Wait for rollout
         run: |
-          kubectl rollout status deployment/backend -n devops --timeout=180s
+          kubectl rollout status deployment/auth -n devops --timeout=180s
+          kubectl rollout status deployment/dashboard -n devops --timeout=180s
+          kubectl rollout status deployment/logs -n devops --timeout=180s
+          kubectl rollout status deployment/monitoring -n devops --timeout=180s
           kubectl rollout status deployment/devops-flow-frontend -n devops --timeout=180s

@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dashboard
+  namespace: devops
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: dashboard
+  template:
+    metadata:
+      labels:
+        app: dashboard
+    spec:
+      {{- include "devopsflow.podSecurityContext" . | nindent 6 }}
+      containers:
+        - name: dashboard
+          image: "{{ .Values.dashboard.image.repository }}:{{ .Values.dashboard.image.tag }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - containerPort: {{ .Values.dashboard.service.port }}
+          {{- include "devopsflow.containerSecurityContext" . | nindent 10 }}
+          {{- include "devopsflow.resources" . | nindent 10 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.dashboard.service.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.dashboard.service.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 5

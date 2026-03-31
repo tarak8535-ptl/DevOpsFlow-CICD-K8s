@@ -1,0 +1,39 @@
+# Production overrides — use with:
+#   helm install devopsflow ./helm -f helm/values-production.yaml
+
+replicaCount: 2
+
+imagePullPolicy: Always
+
+frontend:
+  image:
+    # Replace <ACCOUNT_ID> with your AWS account ID
+    repository: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/devopsflow/frontend
+    tag: latest
+  service:
+    type: LoadBalancer
+    port: 80
+
+auth:
+  image:
+    repository: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/devopsflow/auth
+    tag: latest
+
+dashboard:
+  image:
+    repository: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/devopsflow/dashboard
+    tag: latest
+
+logs:
+  image:
+    repository: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/devopsflow/logs
+    tag: latest
+
+monitoring:
+  image:
+    repository: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/devopsflow/monitoring
+    tag: latest
+
+ingress:
+  enabled: true
+  host: devops-flow.yourdomain.com

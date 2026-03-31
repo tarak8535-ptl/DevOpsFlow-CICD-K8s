@@ -57,10 +57,7 @@ resource "aws_iam_role_policy" "ecr_push" {
           "ecr:UploadLayerPart",
           "ecr:CompleteLayerUpload"
         ]
-        Resource = [
-          aws_ecr_repository.backend.arn,
-          aws_ecr_repository.frontend.arn
-        ]
+        Resource = [for repo in aws_ecr_repository.services : repo.arn]
       }
     ]
   })

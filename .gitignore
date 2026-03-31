@@ -1,6 +1,6 @@
 # Node.js dependencies
 node_modules/
-package-lock.json
+# package-lock.json  # Keep lock files — required by npm ci in Dockerfiles
 
 # Logs
 npm-debug.log*

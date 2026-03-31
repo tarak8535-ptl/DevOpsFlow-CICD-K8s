@@ -8,14 +8,9 @@ output "cluster_endpoint" {
   value       = module.eks.cluster_endpoint
 }
 
-output "ecr_backend_url" {
-  description = "ECR repository URL for backend"
-  value       = aws_ecr_repository.backend.repository_url
-}
-
-output "ecr_frontend_url" {
-  description = "ECR repository URL for frontend"
-  value       = aws_ecr_repository.frontend.repository_url
+output "ecr_urls" {
+  description = "ECR repository URLs for all services"
+  value       = { for name, repo in aws_ecr_repository.services : name => repo.repository_url }
 }
 
 output "github_actions_role_arn" {

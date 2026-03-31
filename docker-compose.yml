@@ -1,0 +1,30 @@
+services:
+  auth-service:
+    build: ./services/auth
+    ports:
+      - "5001:5001"
+
+  dashboard-service:
+    build: ./services/dashboard
+    ports:
+      - "5002:5002"
+
+  logs-service:
+    build: ./services/logs
+    ports:
+      - "5003:5003"
+
+  monitoring-service:
+    build: ./services/monitoring
+    ports:
+      - "5004:5004"
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - auth-service
+      - dashboard-service
+      - logs-service
+      - monitoring-service

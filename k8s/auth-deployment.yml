@@ -1,28 +1,28 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backend
+  name: auth
   namespace: devops
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: backend
+      app: auth
   template:
     metadata:
       labels:
-        app: backend
+        app: auth
     spec:
       securityContext:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: backend
-          image: your-docker-repo/devops-flow-backend:latest
+        - name: auth
+          image: your-docker-repo/devopsflow-auth:latest
           imagePullPolicy: Always
           ports:
-            - containerPort: 5000
+            - containerPort: 5001
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -30,20 +30,20 @@ spec:
               drop: ["ALL"]
           resources:
             limits:
-              cpu: "500m"
-              memory: "512Mi"
-            requests:
-              cpu: "200m"
+              cpu: "300m"
               memory: "256Mi"
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
           livenessProbe:
             httpGet:
               path: /health
-              port: 5000
+              port: 5001
             initialDelaySeconds: 30
             periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /health
-              port: 5000
+              port: 5001
             initialDelaySeconds: 5
             periodSeconds: 5
