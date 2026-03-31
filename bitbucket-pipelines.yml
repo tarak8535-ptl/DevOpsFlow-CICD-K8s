@@ -4,39 +4,46 @@ definitions:
   caches:
     npm: ~/.npm
   steps:
-    - step: &backend-test
-        name: Backend Test
+    # ── Test steps ──────────────────────────────────────────
+    - step: &auth-test
+        name: Auth Service Test
         caches:
           - npm
         script:
-          - cd backend
+          - cd services/auth
           - npm ci
           - npm run lint
           - npm test
-        artifacts:
-          - backend/coverage/**
 
-    - step: &backend-security
-        name: Backend Security Scan
+    - step: &dashboard-test
+        name: Dashboard Service Test
+        caches:
+          - npm
         script:
-          - pipe: aquasecurity/trivy-pipe:1.0.0
-            variables:
-              SCAN_TYPE: 'fs'
-              SCAN_REF: './backend'
-              EXIT_CODE: '1'
-              SEVERITY: 'HIGH,CRITICAL'
-        allow_failure: true
+          - cd services/dashboard
+          - npm ci
+          - npm run lint
+          - npm test
 
-    - step: &backend-build
-        name: Backend Build
-        services:
-          - docker
+    - step: &logs-test
+        name: Logs Service Test
+        caches:
+          - npm
         script:
-          - cd backend
-          - export BACKEND_IMAGE=$BITBUCKET_REPO_SLUG/backend:${BITBUCKET_BRANCH//\//_}
-          - docker build -t $BACKEND_IMAGE .
-          - docker login -u $DOCKER_HUB_USER -p $DOCKER_HUB_PASSWORD
-          - docker push $BACKEND_IMAGE
+          - cd services/logs
+          - npm ci
+          - npm run lint
+          - npm test
+
+    - step: &monitoring-test
+        name: Monitoring Service Test
+        caches:
+          - npm
+        script:
+          - cd services/monitoring
+          - npm ci
+          - npm run lint
+          - npm test
 
     - step: &frontend-test
         name: Frontend Test
@@ -47,43 +54,42 @@ definitions:
           - npm ci
           - npm run lint
           - npm test
-        artifacts:
-          - frontend/coverage/**
 
-    - step: &frontend-security
-        name: Frontend Security Scan
+    # ── Security scan ───────────────────────────────────────
+    - step: &security-scan
+        name: Security Scan (all services)
         script:
           - pipe: aquasecurity/trivy-pipe:1.0.0
             variables:
               SCAN_TYPE: 'fs'
-              SCAN_REF: './frontend'
+              SCAN_REF: '.'
               EXIT_CODE: '1'
               SEVERITY: 'HIGH,CRITICAL'
         allow_failure: true
 
-    - step: &frontend-build
-        name: Frontend Build
+    # ── Build steps ─────────────────────────────────────────
+    - step: &build-services
+        name: Build & Push All Images
         services:
           - docker
         script:
-          - cd frontend
-          - export FRONTEND_IMAGE=$BITBUCKET_REPO_SLUG/frontend:${BITBUCKET_BRANCH//\//_}
-          - docker build -t $FRONTEND_IMAGE .
           - docker login -u $DOCKER_HUB_USER -p $DOCKER_HUB_PASSWORD
+          - TAG=${BITBUCKET_BRANCH//\//_}
+          - |
+            for svc in auth dashboard logs monitoring; do
+              IMAGE=$BITBUCKET_REPO_SLUG/$svc:$TAG
+              docker build -t $IMAGE ./services/$svc
+              docker push $IMAGE
+            done
+          - FRONTEND_IMAGE=$BITBUCKET_REPO_SLUG/frontend:$TAG
+          - docker build -t $FRONTEND_IMAGE ./frontend
           - docker push $FRONTEND_IMAGE
 
+    # ── Deploy steps ────────────────────────────────────────
     - step: &deploy-staging
         name: Deploy to Staging
         deployment: staging
         script:
-          - pipe: atlassian/kubectl-run:2.0.0
-            variables:
-              KUBE_CONFIG: $KUBE_CONFIG_STAGING
-              KUBECTL_COMMAND: 'apply'
-              RESOURCE_PATH: 'k8s/namespace.yml'
-          - cd k8s
-          - export BACKEND_IMAGE=$BITBUCKET_REPO_SLUG/backend:${BITBUCKET_BRANCH//\//_}
-          - sed -i "s|image:.*|image: $BACKEND_IMAGE|g" backend-deployment.yml
           - pipe: atlassian/kubectl-run:2.0.0
             variables:
               KUBE_CONFIG: $KUBE_CONFIG_STAGING
@@ -95,47 +101,40 @@ definitions:
         deployment: production
         trigger: manual
         script:
-          - pipe: atlassian/aws-cli-run:1.0.0
-            variables:
-              AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID
-              AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY
-              AWS_DEFAULT_REGION: $AWS_DEFAULT_REGION
-              COMMAND: 'eks update-kubeconfig --name production-cluster --region $AWS_DEFAULT_REGION'
           - curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
           - chmod +x argocd
           - ./argocd login $ARGOCD_SERVER --username $ARGOCD_USERNAME --password $ARGOCD_PASSWORD --insecure
-          - ./argocd app sync devops-flow
-          - ./argocd app wait devops-flow
+          - ./argocd app sync devopsflow
+          - ./argocd app wait devopsflow
 
 pipelines:
   branches:
     main:
       - parallel:
-          - step: *backend-test
+          - step: *auth-test
+          - step: *dashboard-test
+          - step: *logs-test
+          - step: *monitoring-test
           - step: *frontend-test
-      - parallel:
-          - step: *backend-security
-          - step: *frontend-security
-      - parallel:
-          - step: *backend-build
-          - step: *frontend-build
+      - step: *security-scan
+      - step: *build-services
       - step: *deploy-production
     staging:
       - parallel:
-          - step: *backend-test
+          - step: *auth-test
+          - step: *dashboard-test
+          - step: *logs-test
+          - step: *monitoring-test
           - step: *frontend-test
-      - parallel:
-          - step: *backend-security
-          - step: *frontend-security
-      - parallel:
-          - step: *backend-build
-          - step: *frontend-build
+      - step: *security-scan
+      - step: *build-services
       - step: *deploy-staging
   pull-requests:
     '**':
       - parallel:
-          - step: *backend-test
+          - step: *auth-test
+          - step: *dashboard-test
+          - step: *logs-test
+          - step: *monitoring-test
           - step: *frontend-test
-      - parallel:
-          - step: *backend-security
-          - step: *frontend-security
+      - step: *security-scan

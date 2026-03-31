@@ -12,7 +12,7 @@
 
 ## v1.0.0 (2025-05-25)
 ### Added
-- Multi-platform CI/CD support (GitHub Actions, Bitbucket Pipelines, Jenkins)
+- Multi-platform CI/CD support (GitHub Actions, Bitbucket Pipelines)
 - Flow diagrams for CI/CD, architecture, observability, security, and deployment
 - CI/CD platform comparison table
 

@@ -37,3 +37,15 @@ monitoring:
 ingress:
   enabled: true
   host: devops-flow.yourdomain.com
+
+prometheus:
+  enabled: true
+
+kube-prometheus-stack:
+  grafana:
+    adminPassword: devopsflow
+    service:
+      type: LoadBalancer
+  prometheus:
+    prometheusSpec:
+      serviceMonitorSelectorNilUsesHelmValues: false

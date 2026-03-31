@@ -24,7 +24,7 @@ End-to-end DevOps engineering covering every layer a production system needs:
 |---|---|
 | **App** | 4 Node.js microservices (Auth, Dashboard, Logs, Monitoring) + React SPA with nginx API gateway |
 | **Cloud** | AWS EKS cluster, ECR container registry, VPC networking &mdash; all provisioned via Terraform |
-| **CI/CD** | GitHub Actions with OIDC keyless auth to AWS (+ Bitbucket Pipelines, Jenkins implementations) |
+| **CI/CD** | GitHub Actions with OIDC keyless auth to AWS + Bitbucket Pipelines |
 | **Kubernetes** | Namespace-isolated deployments, Ingress, Services, resource limits, health probes |
 | **Helm** | Parameterized chart for multi-environment promotion |
 | **Security** | GitHub OIDC (zero static credentials), Trivy scanning, OPA Gatekeeper, Pod Security Contexts, Vault, JWT auth |
@@ -32,15 +32,19 @@ End-to-end DevOps engineering covering every layer a production system needs:
 
 ---
 
-<!-- 
 ## Screenshots
-TODO: Add screenshots to a screenshots/ folder and uncomment this section.
-Suggested: Grafana dashboard, GitHub Actions pipeline run, ArgoCD sync view.
 
-| CI/CD Pipeline | Kubernetes Dashboard | Observability |
-|---|---|---|
-| ![pipeline](screenshots/pipeline.png) | ![k8s](screenshots/k8s.png) | ![grafana](screenshots/grafana.png) |
--->
+### Application
+
+| Login | Dashboard | Deployment Logs | Monitoring |
+|---|---|---|---|
+| ![Login](screenshots/login.png) | ![Dashboard](screenshots/dashboard.png) | ![Logs](screenshots/deployment-logs.png) | ![Monitoring](screenshots/monitoring.png) |
+
+### ArgoCD GitOps
+
+| App Overview | Resource Tree | Resources List | Pod View |
+|---|---|---|---|
+| ![Overview](screenshots/argocd-overview.png) | ![Tree](screenshots/argocd-tree.png) | ![Resources](screenshots/argocd-resources.png) | ![Pods](screenshots/argocd-pods.png) |
 
 ## Architecture — Live Flow
 
@@ -106,7 +110,6 @@ DevOpsFlow-CICD-K8s/
 │   ├── frontend-service.yml   # LoadBalancer for frontend
 │   └── ingress.yml
 ├── bitbucket-pipelines.yml    # Bitbucket CI/CD
-├── Jenkinsfile                # Jenkins declarative pipeline
 └── diagrams/                  # Architecture diagram (Python + PNG)
 ```
 
@@ -114,9 +117,9 @@ DevOpsFlow-CICD-K8s/
 
 ## CI/CD Pipelines
 
-Three parallel implementations — same outcome, different platforms — to show platform-agnostic DevOps skills.
+Two parallel implementations — same outcome, different platforms — to show platform-agnostic DevOps skills.
 
-### Pipeline Stages (all three platforms)
+### Pipeline Stages (both platforms)
 
 ```
 Code Push → Test (parallel) → Security Scan → Build & Push → Deploy Staging → [Approval] → Deploy Production
@@ -132,14 +135,14 @@ Code Push → Test (parallel) → Security Scan → Build & Push → Deploy Stag
 
 ### Platform Comparison
 
-| Feature | GitHub Actions | Bitbucket Pipelines | Jenkins |
-|---|---|---|---|
-| Hosting | Cloud | Cloud | Self-hosted |
-| Config format | YAML | YAML | Groovy DSL |
-| Container registry | ECR (via OIDC) | Docker Hub | Any |
-| Parallelism | Job-level | Step-level | Stage-level |
-| Secrets | GitHub Secrets | Repository Variables | Credentials plugin |
-| Production approval | Environment protection rules | Deployment permissions | Input step |
+| Feature | GitHub Actions | Bitbucket Pipelines |
+|---|---|---|
+| Hosting | Cloud | Cloud |
+| Config format | YAML | YAML |
+| Container registry | ECR (via OIDC) | Docker Hub |
+| Parallelism | Job-level | Step-level |
+| Secrets | GitHub Secrets | Repository Variables |
+| Production approval | Environment protection rules | Deployment permissions |
 
 ---
 
@@ -348,7 +351,7 @@ kubectl get endpoints -n devops
 | **IaC** | Terraform |
 | **Containers** | Docker (multi-stage builds) |
 | **Orchestration** | Kubernetes, Helm |
-| **CI/CD** | GitHub Actions (OIDC), Bitbucket Pipelines, Jenkins |
+| **CI/CD** | GitHub Actions (OIDC), Bitbucket Pipelines |
 | **Security** | GitHub OIDC, Trivy, OPA Gatekeeper, HashiCorp Vault, Falco |
 | **Observability** | Prometheus, Grafana, Elasticsearch, Fluentd, Kibana, Jaeger |
 

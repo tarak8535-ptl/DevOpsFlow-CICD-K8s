@@ -193,20 +193,27 @@ jobs:
       - name: Update kubeconfig
         run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER_NAME }}
 
-      - name: Deploy to EKS
+      - name: Deploy to EKS via Helm
         run: |
           REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
 
-          kubectl apply -f k8s/namespace.yml
+          helm dependency build ./helm
 
-          # Substitute images for all microservices
-          sed -i "s|image: .*devopsflow-auth.*|image: ${REGISTRY}/${{ env.ECR_AUTH_REPO }}:${{ env.IMAGE_TAG }}|" k8s/auth-deployment.yml
-          sed -i "s|image: .*devopsflow-dashboard.*|image: ${REGISTRY}/${{ env.ECR_DASHBOARD_REPO }}:${{ env.IMAGE_TAG }}|" k8s/dashboard-deployment.yml
-          sed -i "s|image: .*devopsflow-logs.*|image: ${REGISTRY}/${{ env.ECR_LOGS_REPO }}:${{ env.IMAGE_TAG }}|" k8s/logs-deployment.yml
-          sed -i "s|image: .*devopsflow-monitoring.*|image: ${REGISTRY}/${{ env.ECR_MONITORING_REPO }}:${{ env.IMAGE_TAG }}|" k8s/monitoring-deployment.yml
-          sed -i "s|image: .*devopsflow-frontend.*|image: ${REGISTRY}/${{ env.ECR_FRONTEND_REPO }}:${{ env.IMAGE_TAG }}|" k8s/deployment.yml
-
-          kubectl apply -f k8s/
+          helm upgrade --install devopsflow ./helm \
+            --namespace devops --create-namespace \
+            --set auth.image.repository=${REGISTRY}/${{ env.ECR_AUTH_REPO }} \
+            --set auth.image.tag=${{ env.IMAGE_TAG }} \
+            --set dashboard.image.repository=${REGISTRY}/${{ env.ECR_DASHBOARD_REPO }} \
+            --set dashboard.image.tag=${{ env.IMAGE_TAG }} \
+            --set logs.image.repository=${REGISTRY}/${{ env.ECR_LOGS_REPO }} \
+            --set logs.image.tag=${{ env.IMAGE_TAG }} \
+            --set monitoring.image.repository=${REGISTRY}/${{ env.ECR_MONITORING_REPO }} \
+            --set monitoring.image.tag=${{ env.IMAGE_TAG }} \
+            --set frontend.image.repository=${REGISTRY}/${{ env.ECR_FRONTEND_REPO }} \
+            --set frontend.image.tag=${{ env.IMAGE_TAG }} \
+            --set frontend.service.type=NodePort \
+            --set imagePullPolicy=Always \
+            --wait --timeout 300s
 
       - name: Wait for rollout
         run: |
@@ -239,19 +246,28 @@ jobs:
       - name: Update kubeconfig
         run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER_NAME }}
 
-      - name: Deploy to EKS
+      - name: Deploy to EKS via Helm
         run: |
           REGISTRY=$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
 
-          kubectl apply -f k8s/namespace.yml
+          helm dependency build ./helm
 
-          sed -i "s|image: .*devopsflow-auth.*|image: ${REGISTRY}/${{ env.ECR_AUTH_REPO }}:${{ env.IMAGE_TAG }}|" k8s/auth-deployment.yml
-          sed -i "s|image: .*devopsflow-dashboard.*|image: ${REGISTRY}/${{ env.ECR_DASHBOARD_REPO }}:${{ env.IMAGE_TAG }}|" k8s/dashboard-deployment.yml
-          sed -i "s|image: .*devopsflow-logs.*|image: ${REGISTRY}/${{ env.ECR_LOGS_REPO }}:${{ env.IMAGE_TAG }}|" k8s/logs-deployment.yml
-          sed -i "s|image: .*devopsflow-monitoring.*|image: ${REGISTRY}/${{ env.ECR_MONITORING_REPO }}:${{ env.IMAGE_TAG }}|" k8s/monitoring-deployment.yml
-          sed -i "s|image: .*devopsflow-frontend.*|image: ${REGISTRY}/${{ env.ECR_FRONTEND_REPO }}:${{ env.IMAGE_TAG }}|" k8s/deployment.yml
-
-          kubectl apply -f k8s/
+          helm upgrade --install devopsflow ./helm \
+            --namespace devops --create-namespace \
+            -f helm/values-production.yaml \
+            --set auth.image.repository=${REGISTRY}/${{ env.ECR_AUTH_REPO }} \
+            --set auth.image.tag=${{ env.IMAGE_TAG }} \
+            --set dashboard.image.repository=${REGISTRY}/${{ env.ECR_DASHBOARD_REPO }} \
+            --set dashboard.image.tag=${{ env.IMAGE_TAG }} \
+            --set logs.image.repository=${REGISTRY}/${{ env.ECR_LOGS_REPO }} \
+            --set logs.image.tag=${{ env.IMAGE_TAG }} \
+            --set monitoring.image.repository=${REGISTRY}/${{ env.ECR_MONITORING_REPO }} \
+            --set monitoring.image.tag=${{ env.IMAGE_TAG }} \
+            --set frontend.image.repository=${REGISTRY}/${{ env.ECR_FRONTEND_REPO }} \
+            --set frontend.image.tag=${{ env.IMAGE_TAG }} \
+            --set replicaCount=2 \
+            --set imagePullPolicy=Always \
+            --wait --timeout 300s
 
       - name: Wait for rollout
         run: |

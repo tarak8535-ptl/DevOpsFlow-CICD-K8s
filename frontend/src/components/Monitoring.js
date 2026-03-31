@@ -122,7 +122,9 @@ function Monitoring() {
   if (!metrics) return null;
 
   const cluster = metrics.cluster || {};
-  const services = metrics.services || [];
+  const services = metrics.services
+    ? Object.entries(metrics.services).map(([name, info]) => ({ name, ...info }))
+    : [];
 
   return (
     <div style={pageStyle}>
@@ -132,7 +134,7 @@ function Monitoring() {
         <h3 style={sectionTitleStyle}>System Status</h3>
         <div style={statRowStyle}>
           <span style={statLabelStyle}>Uptime</span>
-          <span style={statValueStyle}>{metrics.uptime ?? '--'}</span>
+          <span style={statValueStyle}>{metrics.uptime ? `${Math.floor(metrics.uptime)}s` : '--'}</span>
         </div>
       </div>
 
@@ -148,11 +150,11 @@ function Monitoring() {
         </div>
         <div style={statRowStyle}>
           <span style={statLabelStyle}>CPU</span>
-          <span style={statValueStyle}>{cluster.cpu ?? '--'}</span>
+          <span style={statValueStyle}>{cluster.cpuUsage ?? '--'}</span>
         </div>
         <div style={statRowStyle}>
           <span style={statLabelStyle}>Memory</span>
-          <span style={statValueStyle}>{cluster.memory ?? '--'}</span>
+          <span style={statValueStyle}>{cluster.memoryUsage ?? '--'}</span>
         </div>
       </div>
 
@@ -163,7 +165,7 @@ function Monitoring() {
             <tr>
               <th style={thStyle}>Service</th>
               <th style={thStyle}>Status</th>
-              <th style={thStyle}>Uptime</th>
+              <th style={thStyle}>Latency</th>
             </tr>
           </thead>
           <tbody>
@@ -178,7 +180,7 @@ function Monitoring() {
                   <td style={{ ...tdStyle, color: healthColor(svc.status), fontWeight: 600 }}>
                     {svc.status}
                   </td>
-                  <td style={tdStyle}>{svc.uptime ?? '--'}</td>
+                  <td style={tdStyle}>{svc.latency ?? '--'}</td>
                 </tr>
               ))
             )}

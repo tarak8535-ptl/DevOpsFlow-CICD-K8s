@@ -42,3 +42,17 @@ monitoring:
 ingress:
   enabled: false
   host: devops-flow.local
+
+# Prometheus + Grafana (kube-prometheus-stack)
+prometheus:
+  enabled: true
+
+kube-prometheus-stack:
+  grafana:
+    adminPassword: devopsflow
+    service:
+      type: NodePort
+      nodePort: 30300
+  prometheus:
+    prometheusSpec:
+      serviceMonitorSelectorNilUsesHelmValues: false

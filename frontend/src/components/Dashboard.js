@@ -58,7 +58,7 @@ function Dashboard() {
     const fetchData = async () => {
       try {
         const response = await axios.get('/api/dashboard', authHeader());
-        setStats(response.data);
+        setStats(response.data.stats);
       } catch (err) {
         if (err.response && (err.response.status === 401 || err.response.status === 403)) {
           localStorage.removeItem('token');

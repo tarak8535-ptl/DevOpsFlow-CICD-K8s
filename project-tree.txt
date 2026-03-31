@@ -28,7 +28,6 @@ DevOpsFlow-CICD-K8s/
 │   │   ├── App.js
 │   │   └── index.js
 │   ├── Dockerfile
-│   ├── Jenkinsfile
 │   └── package.json
 ├── helm/
 │   ├── templates/
@@ -43,5 +42,4 @@ DevOpsFlow-CICD-K8s/
 │   └── service.yml
 ├── .gitignore
 ├── bitbucket-pipelines.yml
-├── Jenkinsfile
 └── README.md
