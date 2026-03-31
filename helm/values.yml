@@ -1,6 +1,7 @@
 replicaCount: 2
 image:
-  repository: your-docker-repo/devops-flow-frontend
+  # Update with your ECR URL after running: terraform output ecr_frontend_url
+  repository: <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/devopsflow/frontend
   tag: latest
   pullPolicy: IfNotPresent
 

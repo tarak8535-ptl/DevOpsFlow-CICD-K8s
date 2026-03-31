@@ -1,17 +1,5 @@
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: frontend-ingress
-  namespace: devops
-spec:
-  rules:
-    - host: devops-flow.yourdomain.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: frontend-service
-                port:
-                  number: 80
+apiVersion: v2
+name: devopsflow
+description: DevOpsFlow application Helm chart
+version: 0.1.0
+appVersion: "1.0.0"

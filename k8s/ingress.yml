@@ -3,7 +3,14 @@ kind: Ingress
 metadata:
   name: frontend-ingress
   namespace: devops
+  annotations:
+    # AWS ALB Ingress Controller (requires aws-load-balancer-controller on EKS):
+    # kubernetes.io/ingress.class: alb
+    # alb.ingress.kubernetes.io/scheme: internet-facing
+    # alb.ingress.kubernetes.io/target-type: ip
+    # alb.ingress.kubernetes.io/healthcheck-path: /health
 spec:
+  # ingressClassName: alb  # Uncomment when using AWS Load Balancer Controller
   rules:
     - host: devops-flow.yourdomain.com
       http:

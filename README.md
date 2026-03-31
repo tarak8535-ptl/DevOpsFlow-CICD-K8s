@@ -1,594 +1,412 @@
-# DevOpsFlow-GitHub-K8s
+# DevOpsFlow-CICD-K8s
 
-## Overview
-DevOpsFlow-CICD-K8s is a comprehensive full-stack application demonstrating modern DevOps practices with CI/CD pipeline and Kubernetes orchestration, using 100% open source tools. It showcases:
-- **Backend**: Node.js-based microservice architecture
-- **Frontend**: React application with responsive design
-- **Infrastructure as Code**: Kubernetes manifests and Helm charts
-- **CI/CD**: GitHub Actions, Bitbucket Pipelines, or Jenkins
-- **Containerization**: Docker with multi-stage builds
-- **Observability**: Prometheus, Grafana, and EFK stack
+> **Built by [Rushi Patel](https://rushipatel.work) &mdash; [LinkedIn](https://linkedin.com/in/rushipatel) &middot; [Portfolio](https://rushipatel.work)**
 
----
+A production-grade DevOps reference architecture demonstrating CI/CD pipelines, Kubernetes deployment, and security hardening &mdash; built entirely with open source tools.
 
-## Features
-- **Microservices Architecture**
-  - RESTful API backend services
-  - React-based frontend with modern UI/UX
-  - Istio service mesh integration
-- **Kubernetes Deployment**
-  - Production-grade manifests with security contexts
-  - Helm charts for environment templating
-  - Horizontal Pod Autoscaling (HPA)
-  - Sealed Secrets for secure configuration
-  - Resource limits and health probes
-- **CI/CD Pipeline**
-  - GitHub Actions workflow
-  - Bitbucket Pipelines support
-  - Jenkins pipeline integration
-  - ArgoCD for GitOps deployment
-  - SonarQube for code quality
-  - Trivy for container scanning
-- **Observability Stack**
-  - Prometheus for metrics collection with authentication
-  - Grafana dashboards for visualization
-  - EFK (Elasticsearch, Fluentd, Kibana) for logging
-  - Jaeger for distributed tracing
-- **Security Features**
-  - JWT-based authentication with brute force protection
-  - Secure token verification with timing attack prevention
-  - Enhanced web security headers (CSP, HSTS)
-  - Rate limiting and payload size restrictions
-  - Non-root container execution with least privilege
-  - Trivy and Clair for image scanning
-  - OPA Gatekeeper for policy enforcement
-  - Kubernetes RBAC implementation
-  - Vault for secret management
-- **High Availability**
-  - Pod disruption budgets
-  - Multi-replica deployments
-  - Rolling update strategies
+[![GitHub Actions](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF?logo=github-actions&logoColor=white)](/.github/workflows/ci-cd.yml)
+[![AWS](https://img.shields.io/badge/Cloud-AWS-FF9900?logo=amazon-web-services&logoColor=white)](https://aws.amazon.com)
+[![Terraform](https://img.shields.io/badge/IaC-Terraform-7B42BC?logo=terraform&logoColor=white)](https://terraform.io)
+[![Kubernetes](https://img.shields.io/badge/Orchestration-Kubernetes-326CE5?logo=kubernetes&logoColor=white)](https://kubernetes.io)
+[![Helm](https://img.shields.io/badge/Packaging-Helm-0F1689?logo=helm&logoColor=white)](https://helm.sh)
+[![Docker](https://img.shields.io/badge/Containers-Docker-2496ED?logo=docker&logoColor=white)](https://docker.com)
+[![Node.js](https://img.shields.io/badge/Backend-Node.js-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![React](https://img.shields.io/badge/Frontend-React-61DAFB?logo=react&logoColor=black)](https://react.dev)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 ---
 
-## File Structure
+## What This Project Demonstrates
+
+End-to-end DevOps engineering covering every layer a production system needs:
+
+| Layer | What's built |
+|---|---|
+| **App** | Node.js REST API + React SPA, containerized with multi-stage Docker builds |
+| **Cloud** | AWS EKS cluster, ECR container registry, VPC networking &mdash; all provisioned via Terraform |
+| **CI/CD** | GitHub Actions with OIDC keyless auth to AWS (+ Bitbucket Pipelines, Jenkins implementations) |
+| **Kubernetes** | Namespace-isolated deployments, Ingress, Services, resource limits, health probes |
+| **Helm** | Parameterized chart for multi-environment promotion |
+| **Security** | GitHub OIDC (zero static credentials), Trivy scanning, OPA Gatekeeper, Pod Security Contexts, Vault, JWT auth |
+| **Observability** | Prometheus + Grafana metrics, EFK log aggregation, Jaeger distributed tracing |
+
+---
+
+<!-- 
+## Screenshots
+TODO: Add screenshots to a screenshots/ folder and uncomment this section.
+Suggested: Grafana dashboard, GitHub Actions pipeline run, ArgoCD sync view.
+
+| CI/CD Pipeline | Kubernetes Dashboard | Observability |
+|---|---|---|
+| ![pipeline](screenshots/pipeline.png) | ![k8s](screenshots/k8s.png) | ![grafana](screenshots/grafana.png) |
+-->
+
+## Architecture — Live Flow
+
+> Every step below runs automatically on `git push`. No static AWS credentials are stored anywhere.
+
+```mermaid
+flowchart TD
+    DEV["Developer"] -->|git push to main/staging| GH["GitHub Repository"]
+
+    GH --> PIPE
+
+    subgraph PIPE ["CI/CD — GitHub Actions"]
+        direction TB
+        T["Backend Tests + Lint<br/>Frontend Tests + Lint<br/>(parallel jobs)"]
+        S["Trivy Security Scan<br/>(backend + frontend)"]
+        B["Docker Build<br/>(multi-stage)"]
+        T --> S --> B
+    end
+
+    subgraph OIDC ["Keyless Auth — GitHub OIDC"]
+        direction LR
+        JWT["GitHub issues<br/>OIDC JWT token"] --> STS["AWS STS validates token<br/>AssumeRoleWithWebIdentity"]
+        STS --> CREDS["Temporary credentials<br/>scoped to this repo only"]
+    end
+
+    B --> JWT
+
+    CREDS --> PUSH
+    CREDS --> DEPLOY
+
+    subgraph AWS ["AWS us-east-1 — Provisioned by Terraform"]
+
+        PUSH["Push images to ECR"]
+        PUSH --> ECR["ECR<br/>devopsflow/backend<br/>devopsflow/frontend"]
+
+        subgraph VPC ["VPC — 2 AZs, private subnets"]
+            subgraph EKS ["EKS Cluster"]
+                direction LR
+                DEPLOY["kubectl apply<br/>k8s/ manifests"] --> NS["devops namespace"]
+                NS --> FE["Frontend Pods<br/>React + Nginx"]
+                NS --> BE["Backend Pods<br/>Node.js + Express"]
+                FE <-->|REST API| BE
+            end
+        end
+
+        ECR -.->|image pull| EKS
+    end
+
+    LB["AWS Load Balancer<br/>auto-provisioned"] --> FE
+    USER["Users"] -->|HTTPS| LB
+
+    style OIDC fill:#e8f5e9,stroke:#2e7d32,color:#000
+    style AWS fill:#fff3e0,stroke:#e65100,color:#000
+    style PIPE fill:#e3f2fd,stroke:#1565c0,color:#000
+```
+
+**What happens on every push:**
+
+| Step | What | How |
+|---|---|---|
+| 1 | Tests + lint run | Parallel jobs for backend and frontend |
+| 2 | Security scan | Trivy checks for HIGH/CRITICAL CVEs |
+| 3 | Docker build | Multi-stage build, cached via GitHub Actions cache |
+| 4 | OIDC auth | GitHub issues a JWT, AWS validates it — zero secrets |
+| 5 | Push images | Tagged with `sha-<commit>` to ECR |
+| 6 | Deploy | `kubectl apply` to EKS via temporary OIDC credentials |
+| 7 | Rollout wait | Pipeline blocks until pods are healthy |
+
+---
+
+## Repository Structure
+
 ```
 DevOpsFlow-CICD-K8s/
-├── .github/
-│   └── workflows/
-│       └── ci-cd.yml                # GitHub Actions workflow configuration
+├── .github/workflows/
+│   └── ci-cd.yml              # GitHub Actions pipeline (OIDC → ECR → EKS)
+├── terraform/
+│   ├── main.tf                # AWS provider, data sources
+│   ├── vpc.tf                 # VPC, subnets, NAT gateway
+│   ├── eks.tf                 # EKS cluster, managed node group, access entries
+│   ├── ecr.tf                 # ECR repositories + lifecycle policies
+│   ├── iam-oidc.tf            # GitHub OIDC provider + IAM role + trust policy
+│   ├── variables.tf           # Input variables with defaults
+│   ├── outputs.tf             # Cluster endpoint, ECR URLs, role ARN
+│   └── versions.tf            # Provider version constraints
 ├── backend/
 │   ├── src/
-│   │   ├── middleware/
-│   │   │   └── auth.js              # Authentication middleware
-│   │   ├── routes/
-│   │   │   ├── auth.js              # Authentication routes
-│   │   │   ├── dashboard.js         # Dashboard API endpoints
-│   │   │   ├── logs.js              # Logging API endpoints
-│   │   │   └── monitoring.js        # Monitoring API endpoints
-│   │   └── server.js                # Main server entry point
-│   ├── Dockerfile                   # Backend container definition
-│   └── package.json                 # Backend dependencies
+│   │   ├── middleware/auth.js  # JWT auth + brute-force protection
+│   │   └── routes/            # dashboard, logs, monitoring endpoints
+│   ├── Dockerfile             # Multi-stage build
+│   └── package.json
 ├── frontend/
-│   ├── nginx/
-│   │   └── nginx.conf               # Nginx configuration for frontend
-│   ├── public/
-│   │   └── index.html               # HTML entry point
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── Dashboard.js         # Dashboard component
-│   │   │   ├── DeploymentLogs.js    # Logs display component
-│   │   │   ├── Login.js             # Authentication component
-│   │   │   └── Monitoring.js        # Monitoring component
-│   │   ├── App.js                   # Main React component
-│   │   └── index.js                 # React entry point
-│   ├── Dockerfile                   # Frontend container definition
-│   └── package.json                 # Frontend dependencies
+│   ├── src/components/        # Dashboard, Login, Monitoring, Logs
+│   ├── nginx/nginx.conf       # Reverse proxy config
+│   ├── Dockerfile             # Multi-stage build
+│   └── package.json
 ├── helm/
-│   ├── templates/
-│   │   └── deployment.yaml          # Kubernetes deployment template
-│   ├── Chart.yml                    # Helm chart definition
-│   └── values.yml                   # Helm values configuration
+│   ├── templates/deployment.yaml
+│   ├── Chart.yml
+│   └── values.yml             # Parameterized for multi-env
 ├── k8s/
-│   ├── backend-deployment.yml       # Backend Kubernetes deployment
-│   ├── deployment.yml               # Main Kubernetes deployment
-│   ├── ingress.yml                  # Ingress configuration
-│   ├── namespace.yml                # Namespace definition
-│   └── service.yml                  # Service definition
-├── .gitignore                       # Git ignore file
-├── bitbucket-pipelines.yml          # Bitbucket Pipelines configuration
-├── Jenkinsfile                      # Jenkins pipeline definition
-└── README.md                        # Project documentation
+│   ├── namespace.yml
+│   ├── deployment.yml         # Security contexts, resource limits
+│   ├── backend-deployment.yml
+│   ├── service.yml
+│   └── ingress.yml            # AWS ALB annotations (commented)
+├── bitbucket-pipelines.yml    # Bitbucket CI/CD
+├── Jenkinsfile                # Jenkins declarative pipeline
+└── flow-diagrams.md           # Extended architecture diagrams
 ```
 
 ---
 
-## Open Source Tools Used
+## CI/CD Pipelines
 
-### Infrastructure
-- **Kubernetes**: Container orchestration
-- **Helm**: Package management for Kubernetes
-- **Istio**: Service mesh for microservices
-- **Cert-Manager**: Certificate management
+Three parallel implementations — same outcome, different platforms — to show platform-agnostic DevOps skills.
 
-### CI/CD
-- **GitHub Actions**: Continuous integration and delivery
-- **Bitbucket Pipelines**: Integrated CI/CD for Bitbucket
-- **Jenkins**: Self-hosted automation server
-- **ArgoCD**: GitOps continuous delivery
-- **Tekton**: Cloud-native CI/CD
+### Pipeline Stages (all three platforms)
 
-### Monitoring & Observability
-- **Prometheus**: Metrics collection and alerting
-- **Grafana**: Metrics visualization
-- **Elasticsearch**: Log storage and search
-- **Fluentd**: Log collection and forwarding
-- **Kibana**: Log visualization
-- **Jaeger**: Distributed tracing
+```
+Code Push → Test (parallel) → Security Scan → Build & Push → Deploy Staging → [Approval] → Deploy Production
+```
 
-### Security
-- **Trivy**: Container vulnerability scanner
-- **OPA Gatekeeper**: Policy enforcement
-- **Vault**: Secret management
-- **Falco**: Runtime security monitoring
+| Stage | What happens |
+|---|---|
+| **Test** | Unit tests + linting for backend and frontend (runs in parallel) |
+| **Security Scan** | Trivy filesystem scan for CVEs |
+| **Build** | Docker multi-stage build, push to container registry |
+| **Deploy Staging** | OIDC auth → `aws eks update-kubeconfig` → `kubectl apply` on staging branch |
+| **Deploy Production** | Same flow on main, requires manual approval via GitHub environment protection |
+
+### Platform Comparison
+
+| Feature | GitHub Actions | Bitbucket Pipelines | Jenkins |
+|---|---|---|---|
+| Hosting | Cloud | Cloud | Self-hosted |
+| Config format | YAML | YAML | Groovy DSL |
+| Container registry | ECR (via OIDC) | Docker Hub | Any |
+| Parallelism | Job-level | Step-level | Stage-level |
+| Secrets | GitHub Secrets | Repository Variables | Credentials plugin |
+| Production approval | Environment protection rules | Deployment permissions | Input step |
 
 ---
 
-## Prerequisites
-- Docker 20.x or newer
-- Kubernetes 1.24+ cluster (Minikube, k3s, or kind for local development)
+## Getting Started
+
+### Prerequisites
+
+- Docker 20.x+
+- Kubernetes 1.24+ (Minikube, k3s, or kind for local)
 - Helm 3.x
-- Node.js 18.x or newer
-- GitHub account with Actions enabled, Bitbucket account with Pipelines enabled, or Jenkins server
-
----
-
-## Quick Start
+- Node.js 18.x+
+- AWS CLI v2 + Terraform >= 1.5 (for AWS deployment)
 
 ### Local Development
-1. **Backend Setup**
-```bash
-cd backend
-npm install
-npm start
-```
 
-2. **Frontend Setup**
-```bash
-cd frontend
-npm install
-npm start
-```
-
-### Docker Deployment
 ```bash
 # Backend
-cd backend
-docker build -t backend:latest .
-docker run -p 5000:5000 --user 1001 backend:latest
+cd backend && npm install && npm start
+
+# Frontend (separate terminal)
+cd frontend && npm install && npm start
+```
+
+### Docker
+
+```bash
+# Backend
+docker build -t backend:latest  ./backend
+docker run -p 5000:5000 backend:latest
 
 # Frontend
-cd frontend
-docker build -t frontend:latest .
-docker run -p 80:80 --user nginx frontend:latest
+docker build -t frontend:latest ./frontend
+docker run -p 80:80 frontend:latest
 ```
 
-### Kubernetes Deployment
-```bash
-# Create namespace
-kubectl apply -f k8s/namespace.yml
+### Kubernetes
 
-# Deploy application
+```bash
+# Deploy
+kubectl apply -f k8s/namespace.yml
 kubectl apply -f k8s/
 
-# Verify deployment
+# Verify
 kubectl get pods -n devops
-kubectl get pods -n devops -o jsonpath='{.items[*].spec.containers[*].securityContext}'
+kubectl get svc   -n devops
 ```
 
-## Deployment Flow
+### Helm
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│                 │     │                 │     │                 │
-│  Git Push       │────▶│  CI/CD Pipeline │────▶│  Container      │
-│                 │     │                 │     │  Registry       │
-│                 │     │                 │     │                 │
-└─────────────────┘     └─────────────────┘     └────────┬────────┘
-                                                         │
-                                                         ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                                                                     │
-│  ┌─────────────────┐     ┌─────────────────┐    ┌──────────────┐    │
-│  │                 │     │                 │    │              │    │
-│  │  ArgoCD         │────▶│  Kubernetes     │───▶│ Application  │    │
-│  │  GitOps         │     │  API Server     │    │ Deployment   │    │
-│  │                 │     │                 │    │              │    │
-│  └─────────────────┘     └─────────────────┘    └──────────────┘    │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Helm Installation
 ```bash
 helm install devops-flow ./helm --namespace devops
 ```
 
-### Testing Authentication
+### Test the API
+
 ```bash
-# Login to get token
+# Get a token
 curl -X POST http://localhost:5000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"password"}'
 
-# Access protected endpoint
+# Hit a protected route
 curl http://localhost:5000/api/dashboard \
-  -H "Authorization: Bearer fake-jwt-token"
+  -H "Authorization: Bearer <token>"
 ```
 
 ---
 
-## CI/CD Pipeline Flow
+## AWS Infrastructure
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│                 │     │                 │     │                 │     │                 │
-│  Code Changes   │────▶│  Test & Scan    │────▶│  Build & Push   │────▶│    Deploy       │
-│                 │     │                 │     │                 │     │                 │
-└─────────────────┘     └─────────────────┘     └─────────────────┘     └─────────────────┘
-        │                       │                       │                       │
-        ▼                       ▼                       ▼                       ▼
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Git Push       │     │  Unit Tests     │     │  Docker Build   │     │  Staging        │
-│  Pull Request   │     │  Linting        │     │  Image Tagging  │     │  (Automatic)    │
-│  Branch Merge   │     │  Security Scan  │     │  Registry Push  │     │                 │
-└─────────────────┘     └─────────────────┘     └─────────────────┘     └─────────────────┘
-                                                                                │
-                                                                                │
-                                                                                ▼
-                                                                        ┌─────────────────┐
-                                                                        │  Production     │
-                                                                        │  (Manual        │
-                                                                        │   Approval)     │
-                                                                        └─────────────────┘
-```
+The project deploys to AWS EKS using **GitHub OIDC** for keyless authentication — no static AWS credentials stored anywhere.
 
-## CI/CD Pipeline Implementation
+### Provision with Terraform
 
-### GitHub Actions Pipeline
-The `.github/workflows/ci-cd.yml` file defines a pipeline with the following stages:
-
-1. **Build & Test**
-   - Dependencies installation
-   - Unit and integration tests
-   - SonarQube code quality analysis
-
-2. **Security Scan**
-   - Trivy container scanning
-   - OWASP dependency check
-   - Secret scanning with git-secrets
-
-3. **Container Build**
-   - Multi-stage Docker builds
-   - Container registry push to GitHub Container Registry (GHCR)
-
-4. **Deployment**
-   - ArgoCD application deployment
-   - Kubernetes manifest application
-
-The workflow includes:
-- Parallel execution of backend and frontend tests
-- Automatic deployment to staging for the staging branch
-- Manual approval required for production deployment
-- Artifact storage for test coverage reports
-- Caching for faster builds
-
-### Bitbucket Pipelines
-The `bitbucket-pipelines.yml` file implements a similar pipeline structure:
-
-1. **Build & Test**
-   - Parallel test execution for backend and frontend
-   - Dependency caching for faster builds
-   - Artifact collection for test reports
-
-2. **Security Scan**
-   - Trivy integration via Bitbucket Pipes
-   - Vulnerability scanning for application code
-
-3. **Container Build**
-   - Docker image building and pushing to Docker Hub
-   - Branch-based image tagging
-
-4. **Deployment**
-   - Kubernetes deployment using kubectl Pipe
-   - ArgoCD integration for GitOps workflow
-   - Manual trigger for production deployment
-
-The pipeline leverages Bitbucket-specific features:
-- Reusable step definitions
-- Bitbucket Pipes for standardized operations
-- Branch-specific workflows
-- Pull request validation
-- Deployment environments with approvals
-
-### Jenkins Pipeline
-The `Jenkinsfile` defines a declarative pipeline with these key stages:
-
-1. **Testing**
-   - Parallel execution of backend and frontend tests
-   - Docker-based Node.js agents for consistent environments
-   - JUnit test reporting and HTML coverage reports
-
-2. **Security Scanning**
-   - Parallel Trivy scans for backend and frontend code
-   - Vulnerability assessment with configurable severity levels
-
-3. **Build & Push**
-   - Conditional image building for main and staging branches
-   - Secure credential handling for registry authentication
-   - Optimized build process for efficiency
-
-4. **Deployment**
-   - Branch-specific deployment strategies
-   - Kubernetes integration with kubectl
-   - Manual approval gate for production deployments
-   - ArgoCD integration for GitOps workflow
-
-The pipeline includes:
-- Workspace cleanup to ensure clean builds
-- Credential management for secure operations
-- Detailed reporting and visualization of test results
-- Parallel execution for improved performance
-
----
-
-## CI/CD Platform Comparison
-
-| Feature | GitHub Actions | Bitbucket Pipelines | Jenkins |
-|---------|---------------|---------------------|---------|
-| **Hosting** | Cloud-hosted | Cloud-hosted | Self-hosted |
-| **Configuration** | YAML | YAML | Groovy DSL |
-| **Container Registry** | GitHub Container Registry | Docker Hub | Any registry |
-| **Parallelism** | Job-level | Step-level | Stage-level |
-| **Caching** | Built-in | Built-in | Plugin-based |
-| **Approvals** | Environment protection rules | Deployment permissions | Input steps |
-| **Secrets** | GitHub Secrets | Repository Variables | Credentials plugin |
-| **Reporting** | Built-in | Built-in | Plugin-based |
-| **Scalability** | Auto-scaling | Auto-scaling | Manual scaling |
-| **Integration** | GitHub ecosystem | Atlassian ecosystem | Plugin ecosystem |
-
----
-
-## Application Architecture Flow
-
-```
-                                  ┌─────────────────┐
-                                  │                 │
-                                  │    Internet     │
-                                  │                 │
-                                  └────────┬────────┘
-                                           │
-                                           ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                           Kubernetes Cluster                        │
-│                                                                     │
-│  ┌─────────────────┐     ┌─────────────────┐    ┌──────────────┐    │
-│  │                 │     │                 │    │              │    │
-│  │    Ingress      │────▶│    Frontend     │───▶│   Backend    │    │
-│  │    Controller   │     │    Service      │    │   Service    │    │
-│  │                 │     │                 │    │              │    │
-│  └─────────────────┘     └─────────────────┘    └──────┬───────┘    │
-│                                                        │            │
-│                                                        ▼            │
-│                                                 ┌──────────────┐    │
-│                                                 │  Database    │    │
-│                                                 │  Service     │    │
-│                                                 │              │    │
-│                                                 └──────────────┘    │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-## Observability Setup
-
-### Prometheus & Grafana
 ```bash
-# Install Prometheus Operator
+cd terraform
+terraform init
+terraform plan
+terraform apply
+```
+
+This creates: VPC (2 AZs, public/private subnets, NAT gateway), EKS cluster (2x t3.medium nodes), ECR repositories, and the IAM OIDC trust for GitHub Actions.
+
+### Configure GitHub
+
+1. Get the role ARN:
+   ```bash
+   terraform output github_actions_role_arn
+   ```
+2. In your GitHub repo: **Settings > Secrets and variables > Actions > Variables**
+   - Add `AWS_ROLE_ARN` = the role ARN from step 1
+3. Create environments in **Settings > Environments**:
+   - `staging` — no protection rules
+   - `production` — add required reviewers, restrict to `main` branch
+
+No AWS secrets needed. GitHub OIDC handles authentication automatically.
+
+### Connect locally
+
+```bash
+aws eks update-kubeconfig --region us-east-1 --name devopsflow
+kubectl get nodes
+```
+
+### Cost estimate
+
+| Resource | Cost |
+|---|---|
+| EKS control plane | ~$73/mo |
+| 2x t3.medium nodes | ~$61/mo |
+| NAT Gateway | ~$33/mo |
+| **Total** | **~$167/mo** |
+
+> Run `terraform destroy` when not in use. For screenshots, spin up → capture → destroy in under an hour (<$1).
+
+---
+
+## Security Highlights
+
+Security is applied at every layer, not bolted on at the end:
+
+**Application layer**
+- JWT authentication with constant-time comparison (prevents timing attacks)
+- Rate limiting on auth endpoints (brute-force protection)
+- Strict CSP, HSTS, XSS headers
+- CORS and payload size restrictions
+
+**Container layer**
+- Multi-stage Docker builds (minimal attack surface)
+- Trivy CVE scanning in every pipeline run
+- Images run as non-root user
+
+**Kubernetes layer**
+- `runAsNonRoot: true` + `readOnlyRootFilesystem: true`
+- All Linux capabilities dropped (`drop: ["ALL"]`)
+- RuntimeDefault seccomp profile
+- Resource limits on every container
+- Liveness and readiness probes
+
+**Cluster layer**
+- OPA Gatekeeper admission policies
+- Kubernetes RBAC
+- HashiCorp Vault for secret injection
+- Falco runtime threat detection
+
+---
+
+## Observability Stack
+
+```bash
+# Prometheus + Grafana
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm install prometheus prometheus-community/kube-prometheus-stack
-
-# Access Grafana
 kubectl port-forward svc/prometheus-grafana 3000:80
-```
 
-### EFK Stack
-```bash
-# Install Elasticsearch
+# EFK (Elasticsearch + Fluentd + Kibana)
 helm repo add elastic https://helm.elastic.co
 helm install elasticsearch elastic/elasticsearch
-
-# Install Fluentd
+helm install kibana        elastic/kibana
 helm repo add fluent https://fluent.github.io/helm-charts
 helm install fluentd fluent/fluentd
-
-# Install Kibana
-helm install kibana elastic/kibana
 ```
 
----
-
-## Observability Flow
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                           Kubernetes Cluster                        │
-│                                                                     │
-│  ┌─────────────────┐     ┌─────────────────┐    ┌──────────────┐    │
-│  │                 │     │                 │    │              │    │
-│  │    Frontend     │     │    Backend      │    │  Database    │    │
-│  │    Pods         │     │    Pods         │    │  Pods        │    │
-│  │                 │     │                 │    │              │    │
-│  └────────┬────────┘     └────────┬────────┘    └──────┬───────┘    │
-│           │                       │                     │           │
-│           │                       │                     │           │
-│           ▼                       ▼                     ▼           │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │                                                             │    │
-│  │                   Prometheus Metrics                        │    │
-│  │                                                             │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                │                                    │
-│                                ▼                                    │
-│  ┌─────────────────┐     ┌─────────────────┐    ┌──────────────┐    │
-│  │                 │     │                 │    │              │    │
-│  │    Grafana      │     │    Fluentd      │    │ Elasticsearch│    │
-│  │    Dashboards   │     │    Collectors   │    │              │    │
-│  │                 │     │                 │    │              │    │
-│  └─────────────────┘     └────────┬────────┘    └──────┬───────┘    │
-│                                   │                     │           │
-│                                   │                     │           │
-│                                   ▼                     ▼           │
-│                          ┌─────────────────┐    ┌──────────────┐    │
-│                          │                 │    │              │    │
-│                          │    Alerts       │    │   Kibana     │    │
-│                          │                 │    │              │    │
-│                          └─────────────────┘    └──────────────┘    │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-## Security Implementation
-
-## Security Flow
-
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│                 │     │                 │     │                 │
-│  Source Code    │────▶│  Dependencies   │────▶│  Container      │
-│  Security Scan  │     │  Security Scan  │     │  Security Scan  │
-│                 │     │                 │     │                 │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-        │                       │                       │
-        ▼                       ▼                       ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                           Kubernetes Cluster                        │
-│                                                                     │
-│  ┌─────────────────┐     ┌─────────────────┐    ┌──────────────┐    │
-│  │                 │     │                 │    │              │    │
-│  │  OPA Gatekeeper │────▶│  RBAC Policies  │───▶│ Pod Security │    │
-│  │  Policies       │     │                 │    │ Context      │    │
-│  │                 │     │                 │    │              │    │
-│  └─────────────────┘     └─────────────────┘    └──────────────┘    │
-│                                                                     │
-│  ┌─────────────────┐     ┌─────────────────┐    ┌──────────────┐    │
-│  │                 │     │                 │    │              │    │
-│  │  Network        │────▶│  Vault Secret   │───▶│ Runtime      │    │
-│  │  Policies       │     │  Management     │    │ Security     │    │
-│  │                 │     │                 │    │              │    │
-│  └─────────────────┘     └─────────────────┘    └──────────────┘    │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Authentication & Authorization
-The application implements a robust authentication and authorization system:
-- Login endpoint at `/api/auth/login` for obtaining JWT tokens with rate limiting to prevent brute force attacks
-- Secure token verification middleware using constant-time comparison to prevent timing attacks
-- Protected routes: `/api/dashboard`, `/api/logs`, `/api/monitoring`, `/metrics`
-
-Example API usage:
-```bash
-# Login to get a token
-curl -X POST http://localhost:5000/api/auth/login -H "Content-Type: application/json" -d '{"username":"admin","password":"password"}'
-
-# Access protected routes with the token
-curl http://localhost:5000/api/dashboard -H "Authorization: Bearer fake-jwt-token"
-```
-
-### Container Security
-```bash
-# Scan container image with Trivy
-trivy image backend:latest
-```
-
-### Kubernetes Security
-- Non-root container execution
-- Read-only root filesystem
-- Dropped capabilities
-- Resource limits and requests
-- Security contexts with seccomp profiles
-- Health probes for liveness and readiness
-
-### Web Security
-- Strict Content Security Policy (CSP)
-- HTTP Strict Transport Security (HSTS)
-- XSS protection headers
-- CORS restrictions
-- Request rate limiting
-- Payload size limits
-
-### Secret Management with Vault
-```bash
-# Install Vault
-helm repo add hashicorp https://helm.releases.hashicorp.com
-helm install vault hashicorp/vault
-
-# Initialize Vault
-kubectl exec vault-0 -- vault operator init
-```
-
-### OPA Gatekeeper
-```bash
-# Install OPA Gatekeeper
-kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/master/deploy/gatekeeper.yaml
-
-# Apply policy
-kubectl apply -f policies/require-labels.yaml
-```
+Metrics flow: `App pods → Prometheus → Grafana dashboards + Alertmanager`
+Log flow: `App pods → Fluentd → Elasticsearch → Kibana`
+Traces: `App → Jaeger` (OpenTelemetry compatible)
 
 ---
 
 ## Troubleshooting
 
-### Common Issues
-1. **Pod Startup Failures**
-   - Check logs: `kubectl logs <pod-name>`
-   - Verify resources: `kubectl describe pod <pod-name>`
-   - Check security contexts: `kubectl get pod <pod-name> -o yaml | grep -A 20 securityContext`
+**Pod not starting**
+```bash
+kubectl logs        <pod> -n devops
+kubectl describe pod <pod> -n devops
+```
 
-2. **Service Discovery Issues**
-   - Validate service: `kubectl get svc`
-   - Check endpoints: `kubectl get endpoints`
-   - Verify Istio configuration: `istioctl analyze`
+**Service not reachable**
+```bash
+kubectl get svc       -n devops
+kubectl get endpoints -n devops
+```
 
-3. **Pipeline Failures**
-   - Review GitHub Actions logs in the Actions tab
-   - For Bitbucket Pipelines, check the Pipelines section in your repository
-   - For Jenkins, check the build console output and Blue Ocean visualization
-   - Verify secrets are properly configured (GitHub Secrets, Bitbucket Variables, or Jenkins Credentials)
-   - Check resource constraints in workflow runners or Jenkins agents
-   - Ensure proper permissions for GITHUB_TOKEN, Bitbucket Pipeline permissions, or Jenkins credentials
+**Pipeline failing**
+- Verify `AWS_ROLE_ARN` variable is set in GitHub repo settings
+- OIDC error (`Could not assume role`): check the trust policy `sub` claim matches your repo
+- ECR auth failure: ensure `ecr:GetAuthorizationToken` is in the IAM policy
+- EKS `Unauthorized`: verify the access entry exists and `authentication_mode` includes `API`
+- Review Trivy scan output for blocking CVEs
 
-4. **Authentication Issues**
-   - Verify token format: `Authorization: Bearer <token>`
-   - Check for rate limiting lockouts
-   - Ensure proper CORS configuration for cross-origin requests
+**Auth errors**
+- Token format must be `Authorization: Bearer <token>`
+- Check for rate-limit lockout (5 failed attempts triggers cooldown)
 
-5. **Security Policy Failures**
-   - Check container security contexts
-   - Verify resource limits are properly set
-   - Review OPA Gatekeeper policies
+---
+
+## Tools & Technologies
+
+| Category | Tools |
+|---|---|
+| **App** | Node.js, Express, React, Nginx |
+| **Cloud** | AWS (EKS, ECR, VPC, IAM) |
+| **IaC** | Terraform |
+| **Containers** | Docker (multi-stage builds) |
+| **Orchestration** | Kubernetes, Helm |
+| **CI/CD** | GitHub Actions (OIDC), Bitbucket Pipelines, Jenkins |
+| **Security** | GitHub OIDC, Trivy, OPA Gatekeeper, HashiCorp Vault, Falco |
+| **Observability** | Prometheus, Grafana, Elasticsearch, Fluentd, Kibana, Jaeger |
 
 ---
 
 ## Contributing
+
 1. Fork the repository
-2. Create a feature branch
-3. Commit changes
-4. Push to the branch
-5. Create a Pull Request
+2. Create a feature branch (`git checkout -b feature/my-change`)
+3. Commit your changes
+4. Open a pull request
 
 ---
 
 ## License
-MIT License - see LICENSE file for details
+
+MIT
+
+---
+
+> **Rushi Patel** &mdash; DevOps & Platform Engineer
+> [rushipatel.work](https://rushipatel.work) &middot; [LinkedIn](https://linkedin.com/in/rushipatel) &middot; Available for freelance engagements
