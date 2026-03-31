@@ -241,68 +241,112 @@ No static `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` needed. The IAM trust p
 
 ### Configure GitHub Actions OIDC
 
-**Step 1: Create the OIDC Identity Provider in AWS**
+#### AWS Console Steps
 
-Terraform handles this automatically (`terraform/iam-oidc.tf`), but here's what it creates:
+**Step 1: Create the OIDC Identity Provider**
 
-| Setting | Value |
-|---|---|
-| Provider URL | `https://token.actions.githubusercontent.com` |
-| Audience | `sts.amazonaws.com` |
-| Thumbprint | `ffffffffffffffffffffffffffffffffffffffff` (AWS ignores this for GitHub) |
+1. Go to **AWS Console > IAM > Identity providers > Add provider**
+2. Select **OpenID Connect**
+3. Fill in:
+   - **Provider URL**: `https://token.actions.githubusercontent.com`
+   - Click **Get thumbprint**
+   - **Audience**: `sts.amazonaws.com`
+4. Click **Add provider**
 
 **Step 2: Create the IAM Role**
 
-Terraform creates `devopsflow-github-actions` role with this trust policy:
-
-```json
-{
-  "Effect": "Allow",
-  "Principal": {
-    "Federated": "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com"
-  },
-  "Action": "sts:AssumeRoleWithWebIdentity",
-  "Condition": {
-    "StringEquals": {
-      "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
-    },
-    "StringLike": {
-      "token.actions.githubusercontent.com:sub": "repo:tarak8535-ptl/DevOpsFlow-CICD-K8s:*"
-    }
-  }
-}
-```
-
-The `sub` claim scopes access to this specific repo. The `*` wildcard allows all branches and environments.
+1. Go to **IAM > Roles > Create role**
+2. Select **Web identity** as trusted entity
+3. Choose:
+   - **Identity provider**: `token.actions.githubusercontent.com`
+   - **Audience**: `sts.amazonaws.com`
+4. Click **Next**, skip policies for now, click **Next**
+5. **Role name**: `devopsflow-github-actions`
+6. Click **Create role**
+7. Open the role, go to **Trust relationships > Edit trust policy**
+8. Replace the condition block with:
+   ```json
+   "Condition": {
+     "StringEquals": {
+       "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+     },
+     "StringLike": {
+       "token.actions.githubusercontent.com:sub": "repo:tarak8535-ptl/DevOpsFlow-CICD-K8s:*"
+     }
+   }
+   ```
+   This scopes the role to your specific repo. The `*` allows all branches and environments.
 
 **Step 3: Attach Permissions to the Role**
 
-The role gets two inline policies (both in `terraform/iam-oidc.tf`):
-
-- **ECR push**: `ecr:PutImage`, `ecr:InitiateLayerUpload`, etc. — scoped to the 5 ECR repos
-- **EKS access**: `eks:DescribeCluster` — for `aws eks update-kubeconfig`
-
-Kubernetes-level auth is handled by the EKS access entry in `terraform/eks.tf`.
-
-**Step 4: Configure GitHub Repo**
-
-1. Get the role ARN after `terraform apply`:
-   ```bash
-   terraform output github_actions_role_arn
+1. Open the role > **Permissions > Add permissions > Create inline policy**
+2. Switch to **JSON** and paste the **ECR push** policy:
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Action": ["ecr:GetAuthorizationToken"],
+         "Resource": "*"
+       },
+       {
+         "Effect": "Allow",
+         "Action": [
+           "ecr:BatchCheckLayerAvailability",
+           "ecr:GetDownloadUrlForLayer",
+           "ecr:BatchGetImage",
+           "ecr:PutImage",
+           "ecr:InitiateLayerUpload",
+           "ecr:UploadLayerPart",
+           "ecr:CompleteLayerUpload"
+         ],
+         "Resource": "arn:aws:ecr:us-east-1:<ACCOUNT_ID>:repository/devopsflow/*"
+       }
+     ]
+   }
    ```
-2. Go to **Settings > Secrets and variables > Actions > Variables**
-   - Add variable: `AWS_ROLE_ARN` = the role ARN from step 1
+   Name it `ecr-push`, click **Create policy**
+3. Add another inline policy for **EKS access**:
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Action": ["eks:DescribeCluster", "eks:ListClusters"],
+         "Resource": "arn:aws:ecr:us-east-1:<ACCOUNT_ID>:cluster/devopsflow"
+       }
+     ]
+   }
+   ```
+   Name it `eks-access`, click **Create policy**
+
+**Step 4: Add the Role as EKS Access Entry**
+
+1. Go to **EKS > Clusters > devopsflow > Access**
+2. Click **Create access entry**
+3. **IAM principal ARN**: paste the role ARN (`arn:aws:iam::<ACCOUNT_ID>:role/devopsflow-github-actions`)
+4. **Policy**: select `AmazonEKSClusterAdminPolicy`
+5. **Access scope**: Cluster
+6. Click **Create**
+
+**Step 5: Configure GitHub Repo**
+
+1. Copy the role ARN from **IAM > Roles > devopsflow-github-actions**
+2. Go to your GitHub repo > **Settings > Secrets and variables > Actions > Variables**
+   - Add variable: `AWS_ROLE_ARN` = the role ARN
 3. Create environments in **Settings > Environments**:
    - `staging` — no protection rules (auto-deploy on staging branch)
    - `production` — add required reviewers, restrict to `main` branch
 
-**Step 5: Workflow Usage**
+**Step 6: Workflow Usage**
 
-The workflow uses `aws-actions/configure-aws-credentials@v4` with `id-token: write` permission:
+The workflow uses `id-token: write` permission to request the OIDC token:
 
 ```yaml
 permissions:
-  id-token: write  # Required for OIDC
+  id-token: write
 steps:
   - uses: aws-actions/configure-aws-credentials@v4
     with:
@@ -310,52 +354,75 @@ steps:
       aws-region: us-east-1
 ```
 
-No secrets needed — just the role ARN as a variable.
+No AWS secrets stored in GitHub. The OIDC token is issued per-run and expires in 5 minutes.
 
 ---
 
 ### Configure Bitbucket Pipelines OIDC
 
-**Step 1: Enable OIDC in Bitbucket**
+#### AWS Console Steps
 
-1. Go to **Repository settings > OpenID Connect**
-2. Copy the **Identity Provider URL** (e.g., `https://api.bitbucket.org/2.0/workspaces/<WORKSPACE>/pipelines-config/identity/oidc`)
-3. Copy the **Audience** value (the repo UUID)
+**Step 1: Get Bitbucket OIDC Details**
 
-**Step 2: Create the IAM OIDC Provider for Bitbucket**
+1. Go to your Bitbucket repo > **Repository settings > OpenID Connect**
+2. Note down:
+   - **Identity Provider URL** (e.g., `https://api.bitbucket.org/2.0/workspaces/YOUR_WORKSPACE/pipelines-config/identity/oidc`)
+   - **Audience** (your workspace UUID, e.g., `ari:cloud:bitbucket::workspace/abcd-1234-...`)
 
-Add to `terraform/iam-oidc.tf` (or create via AWS Console):
+**Step 2: Create the OIDC Identity Provider in AWS**
 
-```hcl
-resource "aws_iam_openid_connect_provider" "bitbucket" {
-  url             = "https://api.bitbucket.org/2.0/workspaces/<WORKSPACE>/pipelines-config/identity/oidc"
-  client_id_list  = ["ari:cloud:bitbucket::workspace/<WORKSPACE_UUID>"]
-  thumbprint_list = ["ffffffffffffffffffffffffffffffffffffffff"]
-}
-```
+1. Go to **AWS Console > IAM > Identity providers > Add provider**
+2. Select **OpenID Connect**
+3. Fill in:
+   - **Provider URL**: paste the Identity Provider URL from step 1
+   - Click **Get thumbprint**
+   - **Audience**: paste the Audience value from step 1
+4. Click **Add provider**
 
-**Step 3: Create IAM Role for Bitbucket**
+**Step 3: Create the IAM Role**
 
-```hcl
-resource "aws_iam_role" "bitbucket_pipelines" {
-  name = "devopsflow-bitbucket-pipelines"
+1. Go to **IAM > Roles > Create role**
+2. Select **Web identity** as trusted entity
+3. Choose:
+   - **Identity provider**: select the Bitbucket provider you just created
+   - **Audience**: select the audience value
+4. Click **Next**, skip policies, click **Next**
+5. **Role name**: `devopsflow-bitbucket-pipelines`
+6. Click **Create role**
+7. Open the role > **Trust relationships > Edit trust policy**
+8. Add a condition to scope to your repo:
+   ```json
+   "Condition": {
+     "StringLike": {
+       "api.bitbucket.org/...:sub": "{YOUR_REPO_UUID}:*"
+     }
+   }
+   ```
 
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Principal = {
-        Federated = aws_iam_openid_connect_provider.bitbucket.arn
-      }
-      Action = "sts:AssumeRoleWithWebIdentity"
-      Condition = {
-        StringLike = {
-          "${aws_iam_openid_connect_provider.bitbucket.url}:sub" = "<REPO_UUID>:*"
-        }
-      }
-    }]
-  })
-}
+**Step 4: Attach Permissions**
+
+Same as GitHub — add the `ecr-push` and `eks-access` inline policies from Steps 3 above. Also add the EKS access entry (Step 4 above) using this role's ARN.
+
+**Step 5: Configure Bitbucket Repo**
+
+1. Go to **Repository settings > Repository variables**
+   - Add `AWS_OIDC_ROLE_ARN` = the role ARN
+2. Create **Deployment environments** in **Repository settings > Deployments**:
+   - `staging` — auto-deploy
+   - `production` — manual trigger
+
+**Step 6: Pipeline Usage**
+
+```yaml
+- step:
+    name: Deploy
+    oidc: true
+    script:
+      - pipe: atlassian/aws-oidc-token:1.0.0
+        variables:
+          AWS_OIDC_ROLE_ARN: $AWS_OIDC_ROLE_ARN
+      - aws eks update-kubeconfig --name devopsflow --region us-east-1
+      - helm upgrade --install devopsflow ./helm --namespace devops
 ```
 
 Attach the same ECR push + EKS access policies as the GitHub role.
